@@ -34,6 +34,13 @@ func (h *TestEventHandler) OnEvent(event *models.EventInfo) {
 	fmt.Printf("📋 Event: %s - %s (%s)\n", event.Reason, event.Message, event.Type)
 }
 
+func (h *TestEventHandler) OnCRDEvent(event *models.CRDEvent) {
+	if event == nil {
+		return
+	}
+	fmt.Printf("🧩 CRD Event: %s %s/%s (%s)\n", event.Type, event.Group, event.Name, event.Kind)
+}
+
 func main() {
 	var configPath string
 	flag.StringVar(&configPath, "config", "./configs/config.yaml", "config file path")

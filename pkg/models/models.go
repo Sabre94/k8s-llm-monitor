@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"github.com/yourusername/k8s-llm-monitor/pkg/uav"
 )
 
 // PodInfo 包含Pod的基本信息
@@ -117,16 +119,16 @@ type SystemHealth struct {
 
 // CRDInfo CRD信息
 type CRDInfo struct {
-	Name         string            `json:"name"`
-	Group        string            `json:"group"`
-	Kind         string            `json:"kind"`
-	Scope        string            `json:"scope"`        // Cluster or Namespaced
-	Versions     []string          `json:"versions"`
-	Plural       string            `json:"plural"`
-	Singular     string            `json:"singular"`
-	Established  bool              `json:"established"`
-	Stored       bool              `json:"stored"`
-	CreationTime time.Time         `json:"creation_time"`
+	Name         string    `json:"name"`
+	Group        string    `json:"group"`
+	Kind         string    `json:"kind"`
+	Scope        string    `json:"scope"` // Cluster or Namespaced
+	Versions     []string  `json:"versions"`
+	Plural       string    `json:"plural"`
+	Singular     string    `json:"singular"`
+	Established  bool      `json:"established"`
+	Stored       bool      `json:"stored"`
+	CreationTime time.Time `json:"creation_time"`
 }
 
 // CustomResourceInfo 自定义资源信息
@@ -145,14 +147,14 @@ type CustomResourceInfo struct {
 
 // CRDEvent CRD事件
 type CRDEvent struct {
-	Type        string                 `json:"type"`        // Added, Modified, Deleted
-	Kind        string                 `json:"kind"`
-	Group       string                 `json:"group"`
-	Version     string                 `json:"version"`
-	Name        string                 `json:"name"`
-	Namespace   string                 `json:"namespace"`
-	Object      map[string]interface{} `json:"object"`
-	Timestamp   time.Time              `json:"timestamp"`
+	Type      string                 `json:"type"` // Added, Modified, Deleted
+	Kind      string                 `json:"kind"`
+	Group     string                 `json:"group"`
+	Version   string                 `json:"version"`
+	Name      string                 `json:"name"`
+	Namespace string                 `json:"namespace"`
+	Object    map[string]interface{} `json:"object"`
+	Timestamp time.Time              `json:"timestamp"`
 }
 
 // RTTResult RTT测试结果
@@ -174,4 +176,17 @@ type NetworkTestResult struct {
 	SuccessRate float64     `json:"success_rate"`
 	TestCount   int         `json:"test_count"`
 	Latency     string      `json:"latency_assessment"` // 延迟评估：excellent, good, poor, very_poor
+}
+
+// UAVReport 无人机遥测上报数据
+type UAVReport struct {
+	NodeName                 string            `json:"node_name"`
+	NodeIP                   string            `json:"node_ip,omitempty"`
+	UAVID                    string            `json:"uav_id"`
+	Source                   string            `json:"source"`
+	Status                   string            `json:"status"`
+	Timestamp                time.Time         `json:"timestamp"`
+	HeartbeatIntervalSeconds int               `json:"heartbeat_interval_seconds,omitempty"`
+	State                    *uav.UAVState     `json:"state,omitempty"`
+	Metadata                 map[string]string `json:"metadata,omitempty"`
 }

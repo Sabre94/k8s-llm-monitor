@@ -54,3 +54,12 @@ type CustomMetricsSource interface {
 	// CollectCustomMetrics 采集自定义指标
 	CollectCustomMetrics(ctx context.Context) (map[string]interface{}, error)
 }
+
+// UAVMetricsSource UAV指标数据源接口
+type UAVMetricsSource interface {
+	// CollectUAVMetrics 采集所有UAV指标
+	CollectUAVMetrics(ctx context.Context) (map[string]interface{}, error)
+
+	// CollectSingleUAVMetrics 采集单个UAV指标
+	CollectSingleUAVMetrics(ctx context.Context, nodeName string) (interface{}, error)
+}

@@ -57,6 +57,19 @@ func (h *LiveMonitorHandler) OnEvent(event *models.EventInfo) {
 	fmt.Println("   ---")
 }
 
+func (h *LiveMonitorHandler) OnCRDEvent(event *models.CRDEvent) {
+	if event == nil {
+		return
+	}
+	elapsed := time.Since(h.startTime)
+	fmt.Printf("🧩 [%s] CRD事件: %s %s (%s)\n",
+		elapsed.Round(time.Second), event.Type, event.Name, event.Kind)
+	if event.Group != "" {
+		fmt.Printf("   组/版本: %s/%s\n", event.Group, event.Version)
+	}
+	fmt.Println("   ---")
+}
+
 func main() {
 	fmt.Println("🔥 K8s 实时监控启动")
 	fmt.Println("================================================")

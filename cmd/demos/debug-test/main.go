@@ -50,6 +50,17 @@ func (h *DebugEventHandler) OnEvent(event *models.EventInfo) {
 	}
 }
 
+func (h *DebugEventHandler) OnCRDEvent(event *models.CRDEvent) {
+	if !h.debug || event == nil {
+		return
+	}
+	fmt.Printf("🔍 [DEBUG] CRD事件:\n")
+	fmt.Printf("   类型: %s\n", event.Type)
+	fmt.Printf("   对象: %s/%s (%s)\n", event.Group, event.Name, event.Kind)
+	fmt.Printf("   时间: %s\n", time.Now().Format("15:04:05"))
+	fmt.Println("   ---")
+}
+
 func main() {
 	fmt.Println("🧪 调试版本 - 让我们看看代码每一步做了什么")
 	fmt.Println("==================================================")

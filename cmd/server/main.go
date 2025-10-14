@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -58,12 +59,16 @@ func main() {
 					log.Printf("Warning: Failed to create rest config: %v", err)
 				} else {
 					managerConfig := metrics.ManagerConfig{
-						Namespaces:      cfg.Metrics.Namespaces,
-						CollectInterval: time.Duration(cfg.Metrics.CollectInterval) * time.Second,
-						EnableNode:      cfg.Metrics.EnableNode,
-						EnablePod:       cfg.Metrics.EnablePod,
-						EnableNetwork:   cfg.Metrics.EnableNetwork,
-						EnableCustom:    cfg.Metrics.EnableCustom,
+						Namespaces:         cfg.Metrics.Namespaces,
+						CollectInterval:    time.Duration(cfg.Metrics.CollectInterval) * time.Second,
+						EnableNode:         cfg.Metrics.EnableNode,
+						EnablePod:          cfg.Metrics.EnablePod,
+						EnableNetwork:      cfg.Metrics.EnableNetwork,
+						EnableCustom:       cfg.Metrics.EnableCustom,
+						EnableUAV:          true, // 启用UAV指标采集
+						NetworkMaxPairs:    5,    // 最多测试5对Pod
+						NetworkTestTimeout: 10 * time.Second,
+						K8sClient:          k8sClient, // 传递K8s client用于网络测试
 					}
 
 					manager, err := metrics.NewManager(restConfig, managerConfig)
@@ -123,10 +128,22 @@ func main() {
 	// 完整快照
 	mux.HandleFunc("/api/v1/metrics/snapshot", metricsSnapshotHandler(metricsManager))
 
+	// 网络指标
+	mux.HandleFunc("/api/v1/metrics/network", metricsNetworkHandler(metricsManager))
+
+	// UAV指标
+	mux.HandleFunc("/api/v1/metrics/uav", metricsUAVHandler(metricsManager))
+	mux.HandleFunc("/api/v1/metrics/uav/", metricsUAVNodeHandler(metricsManager))
+
+	// UAV数据上报接口
+	mux.HandleFunc("/api/v1/uav/report", uavReportHandler(metricsManager, k8sClient))
+	// UAV CRD数据
+	mux.HandleFunc("/api/v1/crd/uav", uavCRDHandler(k8sClient))
+
 	// 4. 创建HTTP服务器
 	server := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
-		Handler: mux,
+		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
+		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 	}
@@ -266,9 +283,9 @@ func podsHandler(k8sClient *k8s.Client) http.HandlerFunc {
 		// 检查K8s连接
 		if k8sClient == nil {
 			response := map[string]interface{}{
-				"status": "warning",
-				"message": "K8s client not available - running in development mode",
-				"pods": []interface{}{},
+				"status":    "warning",
+				"message":   "K8s client not available - running in development mode",
+				"pods":      []interface{}{},
 				"timestamp": time.Now().UTC(),
 			}
 			json.NewEncoder(w).Encode(response)
@@ -287,16 +304,15 @@ func podsHandler(k8sClient *k8s.Client) http.HandlerFunc {
 		}
 
 		response := map[string]interface{}{
-			"status": "success",
-			"pods": allPods,
-			"count": len(allPods),
+			"status":    "success",
+			"pods":      allPods,
+			"count":     len(allPods),
 			"timestamp": time.Now().UTC(),
 		}
 
 		json.NewEncoder(w).Encode(response)
 	}
 }
-
 
 // === 指标相关处理函数 ===
 
@@ -446,6 +462,232 @@ func metricsSnapshotHandler(manager *metrics.Manager) http.HandlerFunc {
 		response := map[string]interface{}{
 			"status": "success",
 			"data":   snapshot,
+		}
+
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
+// metricsNetworkHandler 网络指标处理函数
+func metricsNetworkHandler(manager *metrics.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		if manager == nil {
+			http.Error(w, "Metrics manager not available", http.StatusServiceUnavailable)
+			return
+		}
+
+		networkMetrics := manager.GetNetworkMetrics()
+
+		response := map[string]interface{}{
+			"status":    "success",
+			"data":      networkMetrics,
+			"count":     len(networkMetrics),
+			"timestamp": time.Now().UTC(),
+		}
+
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
+// metricsUAVHandler 所有UAV指标处理函数
+func metricsUAVHandler(manager *metrics.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		if manager == nil {
+			http.Error(w, "Metrics manager not available", http.StatusServiceUnavailable)
+			return
+		}
+
+		uavMetrics := manager.GetUAVMetrics()
+
+		response := map[string]interface{}{
+			"status":    "success",
+			"data":      uavMetrics,
+			"count":     len(uavMetrics),
+			"timestamp": time.Now().UTC(),
+		}
+
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
+// metricsUAVNodeHandler 单个节点UAV指标处理函数
+func metricsUAVNodeHandler(manager *metrics.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		if manager == nil {
+			http.Error(w, "Metrics manager not available", http.StatusServiceUnavailable)
+			return
+		}
+
+		// 从URL路径中提取节点名称
+		nodeName := r.URL.Path[len("/api/v1/metrics/uav/"):]
+		if nodeName == "" {
+			http.Error(w, "Node name is required", http.StatusBadRequest)
+			return
+		}
+
+		uavMetric, exists := manager.GetSingleUAVMetrics(nodeName)
+		if !exists {
+			http.Error(w, fmt.Sprintf("UAV not found on node: %s", nodeName), http.StatusNotFound)
+			return
+		}
+
+		response := map[string]interface{}{
+			"status":    "success",
+			"data":      uavMetric,
+			"timestamp": time.Now().UTC(),
+		}
+
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
+// uavReportHandler UAV状态上报处理函数
+func uavReportHandler(manager *metrics.Manager, k8sClient *k8s.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		var report models.UAVReport
+		if err := json.NewDecoder(r.Body).Decode(&report); err != nil {
+			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+			return
+		}
+
+		if report.NodeName == "" {
+			http.Error(w, "node_name is required", http.StatusBadRequest)
+			return
+		}
+
+		if report.UAVID == "" {
+			report.UAVID = fmt.Sprintf("uav-%s", report.NodeName)
+		}
+
+		if report.Timestamp.IsZero() {
+			report.Timestamp = time.Now().UTC()
+		}
+
+		if report.Source == "" {
+			report.Source = "agent"
+		}
+
+		if report.Status == "" {
+			report.Status = "active"
+		}
+
+		if manager != nil {
+			manager.UpdateUAVReport(&report)
+		} else {
+			log.Printf("Metrics manager unavailable, skipping cache update for node %s", report.NodeName)
+		}
+
+		crdStatus := "unavailable"
+		var crdError string
+		if k8sClient != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+			defer cancel()
+			if err := k8sClient.UpsertUAVMetric(ctx, "", &report); err != nil {
+				log.Printf("Failed to upsert UAVMetric for node %s: %v", report.NodeName, err)
+				crdStatus = "error"
+				crdError = err.Error()
+			} else {
+				crdStatus = "updated"
+			}
+		}
+
+		response := map[string]interface{}{
+			"status":     "success",
+			"crd_status": crdStatus,
+			"timestamp":  time.Now().UTC(),
+			"node_name":  report.NodeName,
+			"uav_id":     report.UAVID,
+			"uav_status": report.Status,
+		}
+
+		if report.HeartbeatIntervalSeconds > 0 {
+			response["heartbeat_interval_seconds"] = report.HeartbeatIntervalSeconds
+		}
+
+		if crdError != "" {
+			response["message"] = crdError
+		}
+
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
+// uavCRDHandler UAV CRD数据处理函数
+func uavCRDHandler(k8sClient *k8s.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		if k8sClient == nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "error",
+				"message": "K8s client not available",
+			})
+			return
+		}
+
+		namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
+		if strings.EqualFold(namespace, "all") {
+			namespace = ""
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+
+		crdData, err := k8sClient.ListUAVMetricsCRD(ctx, namespace)
+		if err != nil {
+			log.Printf("Failed to list UAV CRD data: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "error",
+				"message": err.Error(),
+			})
+			return
+		}
+
+		response := map[string]interface{}{
+			"status":    "success",
+			"count":     len(crdData),
+			"data":      crdData,
+			"timestamp": time.Now().UTC(),
 		}
 
 		json.NewEncoder(w).Encode(response)

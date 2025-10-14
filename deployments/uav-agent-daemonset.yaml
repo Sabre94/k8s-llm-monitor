@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: uav-agent
+  namespace: default
+  labels:
+    app: uav-agent
+spec:
+  selector:
+    matchLabels:
+      app: uav-agent
+  template:
+    metadata:
+      labels:
+        app: uav-agent
+    spec:
+      containers:
+        - name: uav-agent
+          image: k8s-uav-agent:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9090
+              name: http
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: MASTER_URL
+              value: "http://k8s-llm-monitor.default.svc.cluster.local:8081"
+            - name: REPORT_INTERVAL
+              value: "10s"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20

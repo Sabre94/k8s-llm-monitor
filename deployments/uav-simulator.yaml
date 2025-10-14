@@ -1,0 +1,224 @@
+# UAV Mock Simulator Deployment
+# 包含Service和3个UAV模拟器Pod
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: uav-mock-service
+  namespace: default
+  labels:
+    app: uav-agent
+    component: drone-simulator
+spec:
+  type: ClusterIP
+  selector:
+    app: uav-agent
+  ports:
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: http
+---
+# UAV Master Pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: uav-mock-master
+  namespace: default
+  labels:
+    app: uav-agent
+    component: drone-simulator
+    role: master
+spec:
+  nodeName: k3d-k8s-llm-monitor-server-0
+  containers:
+  - name: uav-simulator
+    image: python:3.9-slim
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 9090
+      protocol: TCP
+    env:
+    - name: UAV_ID
+      value: "UAV-MASTER-001"
+    - name: NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+    - name: GPS_LAT
+      value: "39.9042"
+    - name: GPS_LON
+      value: "116.4074"
+    - name: GPS_ALT
+      value: "50.0"
+    - name: GPS_SATS
+      value: "12"
+    - name: BATT_VOLTAGE
+      value: "22.2"
+    - name: BATT_PERCENT
+      value: "85.0"
+    - name: BATT_TEMP
+      value: "28.0"
+    - name: FLIGHT_MODE
+      value: "AUTO"
+    - name: FLIGHT_ARMED
+      value: "true"
+    - name: FLIGHT_SPEED
+      value: "5.0"
+    volumeMounts:
+    - name: uav-code
+      mountPath: /app/mock_server.py
+      subPath: mock_server.py
+    workingDir: /app
+    command:
+    - python3
+    - mock_server.py
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+  volumes:
+  - name: uav-code
+    configMap:
+      name: uav-mock-code
+      defaultMode: 0755
+  restartPolicy: Always
+---
+# UAV Agent Pod 0
+apiVersion: v1
+kind: Pod
+metadata:
+  name: uav-mock-agent-0
+  namespace: default
+  labels:
+    app: uav-agent
+    component: drone-simulator
+    role: agent
+spec:
+  nodeName: k3d-k8s-llm-monitor-agent-0
+  containers:
+  - name: uav-simulator
+    image: python:3.9-slim
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 9090
+      protocol: TCP
+    env:
+    - name: UAV_ID
+      value: "UAV-AGENT-002"
+    - name: NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+    - name: GPS_LAT
+      value: "39.9050"
+    - name: GPS_LON
+      value: "116.4080"
+    - name: GPS_ALT
+      value: "60.0"
+    - name: GPS_SATS
+      value: "11"
+    - name: BATT_VOLTAGE
+      value: "22.1"
+    - name: BATT_PERCENT
+      value: "75.0"
+    - name: BATT_TEMP
+      value: "29.0"
+    - name: FLIGHT_MODE
+      value: "LOITER"
+    - name: FLIGHT_ARMED
+      value: "true"
+    - name: FLIGHT_SPEED
+      value: "0.0"
+    volumeMounts:
+    - name: uav-code
+      mountPath: /app/mock_server.py
+      subPath: mock_server.py
+    workingDir: /app
+    command:
+    - python3
+    - mock_server.py
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+  volumes:
+  - name: uav-code
+    configMap:
+      name: uav-mock-code
+      defaultMode: 0755
+  restartPolicy: Always
+---
+# UAV Agent Pod 1
+apiVersion: v1
+kind: Pod
+metadata:
+  name: uav-mock-agent-1
+  namespace: default
+  labels:
+    app: uav-agent
+    component: drone-simulator
+    role: agent
+spec:
+  nodeName: k3d-k8s-llm-monitor-agent-1
+  containers:
+  - name: uav-simulator
+    image: python:3.9-slim
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 9090
+      protocol: TCP
+    env:
+    - name: UAV_ID
+      value: "UAV-AGENT-003"
+    - name: NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+    - name: GPS_LAT
+      value: "39.9030"
+    - name: GPS_LON
+      value: "116.4060"
+    - name: GPS_ALT
+      value: "70.0"
+    - name: GPS_SATS
+      value: "13"
+    - name: BATT_VOLTAGE
+      value: "22.3"
+    - name: BATT_PERCENT
+      value: "90.0"
+    - name: BATT_TEMP
+      value: "27.0"
+    - name: FLIGHT_MODE
+      value: "AUTO"
+    - name: FLIGHT_ARMED
+      value: "true"
+    - name: FLIGHT_SPEED
+      value: "8.0"
+    volumeMounts:
+    - name: uav-code
+      mountPath: /app/mock_server.py
+      subPath: mock_server.py
+    workingDir: /app
+    command:
+    - python3
+    - mock_server.py
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+  volumes:
+  - name: uav-code
+    configMap:
+      name: uav-mock-code
+      defaultMode: 0755
+  restartPolicy: Always

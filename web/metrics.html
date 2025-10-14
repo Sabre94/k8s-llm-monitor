@@ -263,6 +263,12 @@
         <div id="podsTable">
             <div class="loading">正在加载Pod数据...</div>
         </div>
+
+        <!-- UAV无人机状态 -->
+        <h2 class="section-title">🚁 无人机状态监控</h2>
+        <div id="uavSection">
+            <div class="loading">正在加载UAV数据...</div>
+        </div>
     </div>
 
     <script>
@@ -471,6 +477,97 @@
             }
         }
 
+        // 加载UAV数据
+        async function loadUAVData() {
+            try {
+                const response = await fetch('/api/v1/metrics/uav');
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    const data = result.data;
+                    const uavCount = result.count;
+
+                    if (uavCount === 0) {
+                        document.getElementById('uavSection').innerHTML = `
+                            <div class="card">
+                                <div class="card-title">无人机状态</div>
+                                <div class="card-value">0</div>
+                                <div class="card-subtitle">暂无无人机在线</div>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    // 显示UAV概览卡片
+                    let html = `
+                        <div class="metrics-grid">
+                    `;
+
+                    // 为每个UAV创建卡片
+                    Object.entries(data).forEach(([nodeName, uavData]) => {
+                        const batteryClass = uavData.battery.remaining_percent > 50 ? 'status-healthy' :
+                                           uavData.battery.remaining_percent > 20 ? 'status-warning' : 'status-critical';
+
+                        const statusClass = uavData.health.system_status === 'OK' ? 'status-healthy' : 'status-critical';
+
+                        html += `
+                            <div class="card">
+                                <div class="card-title">🚁 ${uavData.uav_id}</div>
+                                <div class="card-value">
+                                    <span class="status-badge ${statusClass}">
+                                        ${uavData.health.system_status}
+                                    </span>
+                                </div>
+                                <div class="card-subtitle">节点: ${nodeName}</div>
+
+                                <div style="margin-top: 1rem;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                        <span>📍 位置:</span>
+                                        <span>${uavData.gps.latitude.toFixed(4)}, ${uavData.gps.longitude.toFixed(4)}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                        <span>⚡ 电量:</span>
+                                        <span class="status-badge ${batteryClass}">${uavData.battery.remaining_percent}%</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                        <span>🔋 电压:</span>
+                                        <span>${uavData.battery.voltage}V</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                        <span>🕐 高度:</span>
+                                        <span>${uavData.gps.altitude}m</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                        <span>✈️ 模式:</span>
+                                        <span>${uavData.flight.mode}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                        <span>🛡️ 解锁:</span>
+                                        <span>${uavData.flight.armed ? '✅ 已解锁' : '❌ 已上锁'}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span>🛰️ 卫星:</span>
+                                        <span>${uavData.gps.satellite_count}颗</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    html += `</div>`;
+                    document.getElementById('uavSection').innerHTML = html;
+                } else {
+                    document.getElementById('uavSection').innerHTML = `
+                        <div class="error">加载UAV数据失败: ${result.status}</div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('uavSection').innerHTML = `
+                    <div class="error">加载UAV数据失败: ${error.message}</div>
+                `;
+            }
+        }
+
         // 加载所有指标
         async function loadMetrics() {
             const now = new Date().toLocaleString('zh-CN');
@@ -479,7 +576,8 @@
             await Promise.all([
                 loadClusterMetrics(),
                 loadNodes(),
-                loadPods()
+                loadPods(),
+                loadUAVData()
             ]);
         }
 

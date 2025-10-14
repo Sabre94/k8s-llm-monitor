@@ -1,0 +1,169 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-llm-monitor-config
+  namespace: default
+data:
+  config.yaml: |
+    server:
+      host: "0.0.0.0"
+      port: 8081
+      debug: true
+
+    k8s:
+      kubeconfig: ""
+      namespace: "default"
+      watch_namespaces: "default,kube-system"
+
+    llm:
+      provider: "openai"
+      api_key: ""
+      base_url: ""
+      model: "gpt-4"
+      max_tokens: 2000
+      temperature: 0.1
+      timeout: 30
+
+    storage:
+      type: "memory"
+      redis:
+        addr: "localhost:6379"
+        password: ""
+        db: 0
+      postgres:
+        host: "localhost"
+        port: 5432
+        user: "postgres"
+        password: "postgres"
+        database: "k8s_monitor"
+
+    monitoring:
+      metrics_interval: 30
+      event_retention: 168
+      log_retention: 24
+
+    metrics:
+      enabled: true
+      collect_interval: 30
+      namespaces:
+        - default
+        - kube-system
+      enable_node: true
+      enable_pod: true
+      enable_network: true
+      enable_custom: false
+      cache_retention: 300
+
+    analysis:
+      enable_prediction: true
+      enable_auto_fix: false
+      max_context_events: 100
+
+    logging:
+      level: "info"
+      format: "json"
+      output: "stdout"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-llm-monitor
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-llm-monitor
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "endpoints", "events", "nodes", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["monitoring.io"]
+    resources: ["uavmetrics"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-llm-monitor
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8s-llm-monitor
+subjects:
+  - kind: ServiceAccount
+    name: k8s-llm-monitor
+    namespace: default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-llm-monitor
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-llm-monitor
+  template:
+    metadata:
+      labels:
+        app: k8s-llm-monitor
+    spec:
+      serviceAccountName: k8s-llm-monitor
+      containers:
+        - name: server
+          image: k8s-llm-monitor-server:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+              name: http
+          command:
+            - "./server"
+          args:
+            - "-config"
+            - "/app/configs/config.yaml"
+          volumeMounts:
+            - name: config
+              mountPath: /app/configs/config.yaml
+              subPath: config.yaml
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: config
+          configMap:
+            name: k8s-llm-monitor-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-llm-monitor
+  namespace: default
+  labels:
+    app: k8s-llm-monitor
+spec:
+  selector:
+    app: k8s-llm-monitor
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http

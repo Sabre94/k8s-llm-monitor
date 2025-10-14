@@ -348,13 +348,6 @@ func (cw *CRDWatcher) getStatusFromObject(obj map[string]interface{}) map[string
 	return make(map[string]interface{})
 }
 
-// getLastUpdateTime 获取最后更新时间
-func getLastUpdateTime(obj *unstructured.Unstructured) time.Time {
-	if managedFields := obj.GetManagedFields(); len(managedFields) > 0 {
-		return managedFields[0].Time.Time
-	}
-	return obj.GetCreationTimestamp().Time
-}
 
 // updateCustomResourceCache 更新自定义资源缓存
 func (cw *CRDWatcher) updateCustomResourceCache(crd *models.CRDInfo, resource *models.CustomResourceInfo, eventType string) {

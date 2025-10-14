@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/yourusername/k8s-llm-monitor/internal/k8s"
 	"github.com/yourusername/k8s-llm-monitor/internal/metrics/sources"
 	metricstypes "github.com/yourusername/k8s-llm-monitor/pkg/metrics"
+	"github.com/yourusername/k8s-llm-monitor/pkg/models"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
@@ -21,10 +23,13 @@ type Manager struct {
 	podSource     PodMetricsSource
 	networkSource NetworkMetricsSource
 	customSource  CustomMetricsSource
+	uavSource     UAVMetricsSource
 
 	// 缓存
-	snapshot      *metricstypes.MetricsSnapshot
-	snapshotMutex sync.RWMutex
+	snapshot         *metricstypes.MetricsSnapshot
+	uavSnapshot      map[string]interface{} // UAV状态快照
+	uavLastHeartbeat map[string]time.Time   // UAV最后心跳时间
+	snapshotMutex    sync.RWMutex
 
 	// 配置
 	interval time.Duration
@@ -38,12 +43,18 @@ type Manager struct {
 
 // ManagerConfig 管理器配置
 type ManagerConfig struct {
-	Namespaces       []string      // 要监控的命名空间
-	CollectInterval  time.Duration // 采集间隔
-	EnableNode       bool          // 是否启用节点指标采集
-	EnablePod        bool          // 是否启用Pod指标采集
-	EnableNetwork    bool          // 是否启用网络指标采集
-	EnableCustom     bool          // 是否启用自定义指标采集
+	Namespaces      []string      // 要监控的命名空间
+	CollectInterval time.Duration // 采集间隔
+	EnableNode      bool          // 是否启用节点指标采集
+	EnablePod       bool          // 是否启用Pod指标采集
+	EnableNetwork   bool          // 是否启用网络指标采集
+	EnableCustom    bool          // 是否启用自定义指标采集
+	EnableUAV       bool          // 是否启用UAV指标采集
+
+	// 网络指标配置
+	NetworkMaxPairs    int           // 网络测试最大Pod对数
+	NetworkTestTimeout time.Duration // 网络测试超时时间
+	K8sClient          interface{}   // K8s client（用于网络测试）
 }
 
 // NewManager 创建指标管理器
@@ -64,9 +75,11 @@ func NewManager(restConfig *rest.Config, config ManagerConfig) (*Manager, error)
 	logger.SetLevel(logrus.InfoLevel)
 
 	manager := &Manager{
-		interval: config.CollectInterval,
-		logger:   logger,
-		stopChan: make(chan struct{}),
+		interval:         config.CollectInterval,
+		logger:           logger,
+		stopChan:         make(chan struct{}),
+		uavSnapshot:      make(map[string]interface{}),
+		uavLastHeartbeat: make(map[string]time.Time),
 		snapshot: &metricstypes.MetricsSnapshot{
 			Timestamp:      time.Now(),
 			NodeMetrics:    make(map[string]*metricstypes.NodeMetrics),
@@ -87,7 +100,35 @@ func NewManager(restConfig *rest.Config, config ManagerConfig) (*Manager, error)
 		logger.Info("Pod metrics collector enabled")
 	}
 
-	// TODO: 网络指标和自定义指标的初始化将在后续实现
+	// 初始化网络指标采集器
+	if config.EnableNetwork && config.K8sClient != nil {
+		// 类型断言K8sClient
+		if k8sClient, ok := config.K8sClient.(*k8s.Client); ok {
+			networkConfig := sources.NetworkCollectorConfig{
+				Namespaces:     config.Namespaces,
+				MaxPodPairs:    config.NetworkMaxPairs,
+				TestTimeout:    config.NetworkTestTimeout,
+				EnableAutoTest: true,
+			}
+			manager.networkSource = sources.NewNetworkMetricsCollector(kubeClient, k8sClient, networkConfig)
+			logger.Info("Network metrics collector enabled")
+		} else {
+			logger.Warn("Network metrics enabled but K8s client type incorrect")
+		}
+	}
+
+	// 初始化UAV指标采集器
+	if config.EnableUAV {
+		uavConfig := sources.UAVCollectorConfig{
+			Namespace: config.Namespaces[0], // 使用第一个namespace
+			UAVLabel:  "app=uav-agent",
+			Timeout:   5 * time.Second,
+		}
+		manager.uavSource = sources.NewUAVMetricsCollector(kubeClient, uavConfig)
+		logger.Info("UAV metrics collector enabled")
+	}
+
+	// TODO: 自定义指标的初始化将在后续实现
 
 	return manager, nil
 }
@@ -164,7 +205,7 @@ func (m *Manager) Collect(ctx context.Context) error {
 	}
 
 	var wg sync.WaitGroup
-	var nodeErr, podErr error
+	var nodeErr, podErr, networkErr error
 
 	// 并发采集各类指标
 	if m.nodeSource != nil {
@@ -195,7 +236,49 @@ func (m *Manager) Collect(ctx context.Context) error {
 		}()
 	}
 
-	// TODO: 添加网络和自定义指标采集
+	// 采集网络指标
+	if m.networkSource != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			networkMetrics, err := m.networkSource.CollectNetworkMetrics(ctx)
+			if err != nil {
+				networkErr = err
+				m.logger.Errorf("Failed to collect network metrics: %v", err)
+				return
+			}
+			snapshot.NetworkMetrics = networkMetrics
+		}()
+	}
+
+	// 采集UAV指标
+	var uavMetrics map[string]interface{}
+	if m.uavSource != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rawMetrics, err := m.uavSource.CollectUAVMetrics(ctx)
+			if err != nil {
+				m.logger.Errorf("Failed to collect UAV metrics: %v", err)
+				return
+			}
+			now := time.Now().UTC()
+			metrics := make(map[string]interface{}, len(rawMetrics))
+			for nodeName, data := range rawMetrics {
+				metrics[nodeName] = map[string]interface{}{
+					"node_name":      nodeName,
+					"status":         "active",
+					"source":         "pull",
+					"timestamp":      now,
+					"last_heartbeat": now,
+					"state":          data,
+				}
+			}
+			uavMetrics = metrics
+		}()
+	}
+
+	// TODO: 添加自定义指标采集
 
 	wg.Wait()
 
@@ -205,11 +288,35 @@ func (m *Manager) Collect(ctx context.Context) error {
 	// 更新缓存
 	m.snapshotMutex.Lock()
 	m.snapshot = snapshot
+	if uavMetrics != nil {
+		m.uavSnapshot = uavMetrics
+		if m.uavLastHeartbeat == nil {
+			m.uavLastHeartbeat = make(map[string]time.Time)
+		}
+		for nodeName, raw := range uavMetrics {
+			if entry, ok := raw.(map[string]interface{}); ok {
+				switch ts := entry["last_heartbeat"].(type) {
+				case time.Time:
+					m.uavLastHeartbeat[nodeName] = ts
+				case string:
+					if parsed, err := time.Parse(time.RFC3339, ts); err == nil {
+						m.uavLastHeartbeat[nodeName] = parsed
+					} else {
+						m.uavLastHeartbeat[nodeName] = time.Now()
+					}
+				default:
+					m.uavLastHeartbeat[nodeName] = time.Now()
+				}
+			} else {
+				m.uavLastHeartbeat[nodeName] = time.Now()
+			}
+		}
+	}
 	m.snapshotMutex.Unlock()
 
 	duration := time.Since(startTime)
-	m.logger.Infof("Metrics collection completed in %v (nodes: %d, pods: %d)",
-		duration, len(snapshot.NodeMetrics), len(snapshot.PodMetrics))
+	m.logger.Infof("Metrics collection completed in %v (nodes: %d, pods: %d, network: %d, uavs: %d)",
+		duration, len(snapshot.NodeMetrics), len(snapshot.PodMetrics), len(snapshot.NetworkMetrics), len(uavMetrics))
 
 	// 如果有错误，返回第一个错误
 	if nodeErr != nil {
@@ -217,6 +324,10 @@ func (m *Manager) Collect(ctx context.Context) error {
 	}
 	if podErr != nil {
 		return podErr
+	}
+	if networkErr != nil {
+		// 网络指标错误只记录日志，不中断采集
+		m.logger.Warnf("Network metrics collection had errors: %v", networkErr)
 	}
 
 	return nil
@@ -257,6 +368,125 @@ func (m *Manager) GetClusterMetrics() *metricstypes.ClusterMetrics {
 	m.snapshotMutex.RLock()
 	defer m.snapshotMutex.RUnlock()
 	return m.snapshot.ClusterMetrics
+}
+
+// GetNetworkMetrics 获取网络指标
+func (m *Manager) GetNetworkMetrics() []*metricstypes.NetworkMetrics {
+	m.snapshotMutex.RLock()
+	defer m.snapshotMutex.RUnlock()
+	return m.snapshot.NetworkMetrics
+}
+
+// TestPodCommunication 测试指定Pod对的网络连通性（按需测试）
+func (m *Manager) TestPodCommunication(ctx context.Context, sourcePod, targetPod string) (*metricstypes.NetworkMetrics, error) {
+	if m.networkSource == nil {
+		return nil, fmt.Errorf("network metrics collector not enabled")
+	}
+
+	// 直接调用接口方法
+	return m.networkSource.TestPodConnectivity(ctx, sourcePod, targetPod)
+}
+
+// UpdateUAVReport 接收来自Agent的UAV状态上报
+func (m *Manager) UpdateUAVReport(report *models.UAVReport) {
+	if report == nil || report.NodeName == "" {
+		return
+	}
+
+	reportTime := report.Timestamp
+	if reportTime.IsZero() {
+		reportTime = time.Now().UTC()
+	}
+
+	status := report.Status
+	if status == "" {
+		status = "active"
+	}
+
+	source := report.Source
+	if source == "" {
+		source = "agent"
+	}
+
+	entry := map[string]interface{}{
+		"node_name":      report.NodeName,
+		"uav_id":         report.UAVID,
+		"status":         status,
+		"source":         source,
+		"timestamp":      reportTime,
+		"last_heartbeat": reportTime,
+	}
+
+	if report.NodeIP != "" {
+		entry["node_ip"] = report.NodeIP
+	}
+
+	if report.HeartbeatIntervalSeconds > 0 {
+		entry["heartbeat_interval_seconds"] = report.HeartbeatIntervalSeconds
+	}
+
+	if len(report.Metadata) > 0 {
+		entry["metadata"] = report.Metadata
+	}
+
+	if report.State != nil {
+		stateCopy := *report.State
+		entry["state"] = stateCopy
+	}
+
+	m.snapshotMutex.Lock()
+	if m.uavSnapshot == nil {
+		m.uavSnapshot = make(map[string]interface{})
+	}
+	m.uavSnapshot[report.NodeName] = entry
+	if m.uavLastHeartbeat == nil {
+		m.uavLastHeartbeat = make(map[string]time.Time)
+	}
+	m.uavLastHeartbeat[report.NodeName] = reportTime
+	m.snapshotMutex.Unlock()
+
+	m.logger.Debugf("UAV report ingested: node=%s uav=%s status=%s", report.NodeName, report.UAVID, status)
+}
+
+// GetUAVMetrics 获取所有UAV指标
+func (m *Manager) GetUAVMetrics() map[string]interface{} {
+	m.snapshotMutex.RLock()
+	defer m.snapshotMutex.RUnlock()
+
+	if len(m.uavSnapshot) == 0 {
+		return map[string]interface{}{}
+	}
+
+	result := make(map[string]interface{}, len(m.uavSnapshot))
+	for key, value := range m.uavSnapshot {
+		result[key] = value
+	}
+	return result
+}
+
+// GetSingleUAVMetrics 获取指定节点的UAV指标
+func (m *Manager) GetSingleUAVMetrics(nodeName string) (interface{}, bool) {
+	m.snapshotMutex.RLock()
+	defer m.snapshotMutex.RUnlock()
+
+	if m.uavSnapshot == nil {
+		return nil, false
+	}
+
+	metric, exists := m.uavSnapshot[nodeName]
+	if !exists {
+		return nil, false
+	}
+
+	if entry, ok := metric.(map[string]interface{}); ok {
+		clone := make(map[string]interface{}, len(entry))
+		for key, value := range entry {
+			clone[key] = value
+		}
+		return clone, true
+	}
+
+	return metric, true
 }
 
 // calculateClusterMetrics 计算集群整体指标

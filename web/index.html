@@ -3,10 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UAV CRD 监控面板</title>
+    <title>K8s LLM Monitor 控制台</title>
     <style>
         :root {
             color-scheme: light dark;
+            --bg-gradient: radial-gradient(circle at 20% 20%, #0ea5e9 0%, rgba(14, 165, 233, 0) 55%),
+                radial-gradient(circle at 80% 0%, #6366f1 0%, rgba(99, 102, 241, 0) 45%),
+                #0f172a;
+            --card-bg: rgba(15, 23, 42, 0.72);
+            --card-border: rgba(148, 163, 184, 0.25);
+            --text-strong: #f8fafc;
+            --text-muted: #cbd5f5;
+            --accent: #38bdf8;
+            --accent-soft: rgba(56, 189, 248, 0.2);
+            --success: #34d399;
+            --warn: #f97316;
+            --error: #f43f5e;
         }
 
         * {
@@ -16,216 +28,250 @@
         }
 
         body {
-            font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #f2f4f8;
-            color: #1f2937;
             min-height: 100vh;
+            font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-strong);
+            display: flex;
+            justify-content: center;
+            padding: 40px 16px 80px;
         }
 
-        .layout {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 24px 20px 60px;
+        .app {
+            width: min(1180px, 100%);
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
         }
 
-        .header {
+        .hero {
+            background: linear-gradient(130deg, rgba(99, 102, 241, 0.85), rgba(14, 165, 233, 0.65));
+            border-radius: 26px;
+            padding: 32px clamp(24px, 5vw, 48px);
+            box-shadow: 0 40px 90px rgba(15, 23, 42, 0.45);
             display: flex;
             flex-wrap: wrap;
             justify-content: space-between;
-            align-items: flex-start;
-            gap: 16px;
-            background: linear-gradient(135deg, #4f46e5, #7c3aed);
-            color: #fff;
-            padding: 24px;
-            border-radius: 18px;
-            box-shadow: 0 20px 45px rgba(79, 70, 229, 0.25);
+            gap: 18px;
         }
 
-        .header h1 {
-            font-size: 28px;
+        .hero h1 {
+            font-size: clamp(28px, 4vw, 38px);
             font-weight: 700;
-            margin-bottom: 8px;
+            letter-spacing: 0.02em;
         }
 
-        .header p {
+        .hero p {
+            margin-top: 10px;
             font-size: 15px;
-            opacity: 0.85;
+            color: rgba(241, 245, 249, 0.85);
+            max-width: 520px;
+            line-height: 1.6;
         }
 
-        .header-actions {
+        .hero-actions {
             display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 16px;
+            flex-direction: column;
+            gap: 12px;
+            align-items: flex-end;
         }
 
-        .header-actions button {
+        .hero-actions button {
             border: none;
-            background: rgba(255, 255, 255, 0.15);
-            color: #fff;
-            padding: 10px 18px;
+            background: rgba(15, 23, 42, 0.8);
+            color: #38bdf8;
+            padding: 11px 24px;
             border-radius: 999px;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
             cursor: pointer;
-            font-size: 14px;
-            transition: background 0.2s ease, transform 0.2s ease;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
 
-        .header-actions button:hover {
-            background: rgba(255, 255, 255, 0.25);
-            transform: translateY(-1px);
+        .hero-actions button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.45);
         }
 
-        .header-actions .timestamp {
+        .hero-actions button:disabled {
+            opacity: 0.55;
+            cursor: progress;
+        }
+
+        .hero-actions .timestamp {
             font-size: 13px;
-            opacity: 0.8;
+            font-weight: 500;
+            color: rgba(241, 245, 249, 0.7);
         }
 
-        .alert {
-            margin-top: 20px;
+        .status-bar {
+            border-radius: 18px;
             padding: 14px 18px;
-            border-radius: 12px;
-            background: rgba(239, 68, 68, 0.12);
-            color: #b91c1c;
+            background: rgba(30, 41, 59, 0.75);
+            border: 1px solid rgba(148, 163, 184, 0.2);
             font-size: 14px;
-            display: none;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
-        .summary {
+        .status-bar[data-variant="success"] {
+            border-color: rgba(52, 211, 153, 0.35);
+            color: #bbf7d0;
+        }
+
+        .status-bar[data-variant="error"] {
+            border-color: rgba(244, 63, 94, 0.4);
+            color: #fecaca;
+        }
+
+        .summary-grid {
             display: grid;
+            gap: 18px;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 16px;
-            margin: 28px 0 24px;
         }
 
         .summary-card {
-            background: #fff;
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: 0 15px 35px rgba(15, 23, 42, 0.08);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 22px;
+            padding: 22px 24px;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
+            position: relative;
+            overflow: hidden;
         }
 
-        .summary-card .label {
-            font-size: 14px;
-            color: #6b7280;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
+        .summary-card::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: radial-gradient(circle at top right, rgba(148, 163, 184, 0.35), transparent 55%);
+            opacity: 0.4;
         }
 
-        .summary-card .value {
-            font-size: 28px;
+        .summary-card strong {
+            font-size: 13px;
+            letter-spacing: 0.12em;
+            color: rgba(226, 232, 240, 0.7);
+        }
+
+        .summary-card span.value {
+            font-size: clamp(26px, 4vw, 32px);
             font-weight: 700;
-            color: #1f2937;
+            color: var(--accent);
         }
 
-        .summary-card .hint {
+        .summary-card span.note {
             font-size: 13px;
-            color: #6b7280;
+            color: rgba(226, 232, 240, 0.6);
         }
 
-        .controls {
-            background: #fff;
-            border-radius: 14px;
-            padding: 18px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            align-items: center;
-            box-shadow: 0 15px 35px rgba(15, 23, 42, 0.07);
-        }
-
-        .controls label {
+        .sub {
             font-size: 13px;
-            font-weight: 600;
-            text-transform: uppercase;
-            color: #6b7280;
+            color: rgba(203, 213, 225, 0.7);
         }
 
-        .controls select {
-            min-width: 160px;
-            padding: 8px 12px;
-            border-radius: 12px;
-            border: 1px solid #d1d5db;
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.2s ease;
-        }
-
-        .controls select:focus {
-            border-color: #6366f1;
-        }
-
-        .grid {
-            margin-top: 24px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 20px;
-        }
-
-        .uav-card {
-            background: #fff;
-            border-radius: 18px;
-            padding: 20px;
-            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+        .section {
             display: flex;
             flex-direction: column;
-            gap: 14px;
-            border: 1px solid rgba(99, 102, 241, 0.15);
+            gap: 16px;
         }
 
-        .uav-card:hover {
-            transform: translateY(-3px);
-            transition: transform 0.2s ease;
-        }
-
-        .uav-header {
+        .section-header {
             display: flex;
             justify-content: space-between;
-            gap: 12px;
+            align-items: baseline;
+            gap: 16px;
         }
 
-        .uav-id {
+        .section-header h2 {
             font-size: 20px;
-            font-weight: 700;
-            color: #1f2937;
-        }
-
-        .uav-meta {
-            font-size: 13px;
-            color: #6b7280;
-        }
-
-        .status-badge {
-            align-self: flex-start;
-            font-size: 12px;
             font-weight: 600;
-            padding: 6px 12px;
+            letter-spacing: 0.04em;
+        }
+
+        .section-header .tag {
+            font-size: 13px;
+            padding: 6px 14px;
             border-radius: 999px;
+            background: rgba(148, 163, 184, 0.2);
+            color: #e2e8f0;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            padding: 20px 24px;
+            box-shadow: 0 30px 70px rgba(15, 23, 42, 0.35);
+        }
+
+        .table-wrap {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        .table-wrap::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .table-wrap::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.3);
+            border-radius: 999px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead th {
+            text-align: left;
+            font-size: 12px;
+            letter-spacing: 0.18em;
             text-transform: uppercase;
-            letter-spacing: 0.06em;
+            color: rgba(226, 232, 240, 0.55);
+            padding-bottom: 12px;
         }
 
-        .status-ok {
-            background: rgba(16, 185, 129, 0.15);
-            color: #047857;
+        tbody td {
+            padding: 14px 0;
+            border-top: 1px solid rgba(148, 163, 184, 0.18);
+            font-size: 14px;
+            color: rgba(226, 232, 240, 0.86);
         }
 
-        .status-warning {
-            background: rgba(245, 158, 11, 0.18);
-            color: #92400e;
+        tbody tr:first-child td {
+            border-top: none;
         }
 
-        .status-error, .status-critical {
-            background: rgba(239, 68, 68, 0.18);
-            color: #b91c1c;
+        .status-dot {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .metrics {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
+        .status-dot::before {
+            content: "";
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 0 6px rgba(52, 211, 153, 0.12);
+        }
+
+        .status-dot[data-status="warning"]::before {
+            background: var(--warn);
+            box-shadow: 0 0 0 6px rgba(249, 115, 22, 0.16);
+        }
+
+        .status-dot[data-status="error"]::before {
+            background: var(--error);
+            box-shadow: 0 0 0 6px rgba(244, 63, 94, 0.18);
         }
 
         .metric {
@@ -234,423 +280,525 @@
             gap: 4px;
         }
 
-        .metric span {
+        .metric span.primary {
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .metric span.sub {
             font-size: 12px;
-            text-transform: uppercase;
-            color: #94a3b8;
-            letter-spacing: 0.05em;
+            color: rgba(203, 213, 225, 0.65);
         }
 
-        .metric strong {
-            font-size: 15px;
-            color: #1f2937;
+        .uav-grid {
+            display: grid;
+            gap: 18px;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         }
 
-        .battery-good {
-            color: #059669;
-        }
-
-        .battery-medium {
-            color: #b45309;
-        }
-
-        .battery-low {
-            color: #dc2626;
-        }
-
-        .empty {
-            grid-column: 1 / -1;
-            text-align: center;
-            padding: 40px 20px;
-            background: rgba(148, 163, 184, 0.1);
-            border-radius: 16px;
-            color: #64748b;
-        }
-
-        .raw-section {
-            margin-top: 32px;
-            background: #0f172a;
-            color: #e0f2fe;
-            border-radius: 16px;
+        .uav-card {
+            background: linear-gradient(140deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.78));
+            border-radius: 22px;
+            border: 1px solid rgba(148, 163, 184, 0.25);
             padding: 20px;
-            box-shadow: 0 20px 35px rgba(15, 23, 42, 0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(16px);
         }
 
-        .raw-section h2 {
+        .uav-card::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 80% 0%, rgba(56, 189, 248, 0.35), transparent 60%);
+            opacity: 0.35;
+            pointer-events: none;
+        }
+
+        .uav-card > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .uav-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+
+        .uav-header h3 {
             font-size: 18px;
-            margin-bottom: 12px;
+            font-weight: 600;
         }
 
-        .raw-section pre {
-            max-height: 360px;
-            overflow: auto;
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             font-size: 12px;
-            line-height: 1.6;
-            white-space: pre-wrap;
-            word-break: break-word;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(226, 232, 240, 0.16);
+            color: rgba(241, 245, 249, 0.9);
+        }
+
+        .badge[data-variant="success"] {
+            background: rgba(52, 211, 153, 0.18);
+            color: #bbf7d0;
+        }
+
+        .badge[data-variant="warning"] {
+            background: rgba(249, 115, 22, 0.18);
+            color: #fed7aa;
+        }
+
+        .details {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        }
+
+        .details span {
+            font-size: 13px;
+            color: rgba(226, 232, 240, 0.75);
+        }
+
+        .details strong {
+            display: block;
+            font-size: 12px;
+            color: rgba(148, 163, 184, 0.8);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 4px;
+        }
+
+        .empty-state {
+            text-align: center;
+            font-size: 14px;
+            color: rgba(203, 213, 225, 0.65);
+            padding: 24px 0;
         }
 
         @media (max-width: 720px) {
-            .header {
-                flex-direction: column;
+            body {
+                padding-top: 32px;
             }
 
-            .metrics {
-                grid-template-columns: 1fr;
-            }
-
-            .controls {
-                flex-direction: column;
+            .hero-actions {
+                width: 100%;
                 align-items: stretch;
             }
 
-            .controls select {
+            .hero-actions button {
                 width: 100%;
+                justify-content: center;
+            }
+
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
             }
         }
     </style>
 </head>
 <body>
-    <div class="layout">
-        <header class="header">
+    <main class="app">
+        <header class="hero">
             <div>
-                <h1>UAV CRD 监控面板</h1>
-                <p>实时汇总无人机自定义资源（UAVMetric）的运行状态与关键指标</p>
+                <h1>K8s LLM Monitor · 实时控制台</h1>
+                <p>纵览集群资源、Pod 运行状态与 UAV 遥测数据。所有指标均来自实时 API 与 Kubernetes 自定义资源 (CRD)。</p>
             </div>
-            <div class="header-actions">
-                <button id="refresh-btn">刷新数据</button>
-                <div class="timestamp" id="last-update">最后刷新：-</div>
+            <div class="hero-actions">
+                <button id="refreshButton">手动刷新</button>
+                <span class="timestamp" id="lastUpdated">最后更新：-</span>
             </div>
         </header>
 
-        <div class="alert" id="error-banner"></div>
+        <section class="status-bar" id="statusBar" data-variant="success" hidden>
+            <span id="statusText">状态</span>
+        </section>
 
-        <section class="summary">
-            <div class="summary-card">
-                <div class="label">集群节点</div>
-                <div class="value" id="cluster-nodes">-</div>
-                <div class="hint">监控命名空间 Pod：<span id="cluster-pods">-</span></div>
+        <section class="summary-grid">
+            <article class="summary-card" id="summaryNodes">
+                <strong>节点</strong>
+                <span class="value">-</span>
+                <span class="note">健康节点 / 总节点</span>
+            </article>
+            <article class="summary-card" id="summaryPods">
+                <strong>工作负载</strong>
+                <span class="value">-</span>
+                <span class="note">运行中 Pod / 总 Pod</span>
+            </article>
+            <article class="summary-card" id="summaryCpu">
+                <strong>CPU 利用率</strong>
+                <span class="value">-</span>
+                <span class="note">已用 / 总量</span>
+            </article>
+            <article class="summary-card" id="summaryUav">
+                <strong>UAV 心跳</strong>
+                <span class="value">-</span>
+                <span class="note">活跃 UAV / CRD 记录</span>
+            </article>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <h2>节点指标</h2>
+                <span class="tag" id="nodeCount">- 节点</span>
             </div>
-            <div class="summary-card">
-                <div class="label">CRD 资源</div>
-                <div class="value" id="crd-count">-</div>
-                <div class="hint">当前命名空间：<span id="namespace-count">-</span> 个</div>
-            </div>
-            <div class="summary-card">
-                <div class="label">健康 UAV</div>
-                <div class="value" id="healthy-count">-</div>
-                <div class="hint">系统状态为 OK 的设备</div>
-            </div>
-            <div class="summary-card">
-                <div class="label">低电量 UAV</div>
-                <div class="value" id="low-battery-count">-</div>
-                <div class="hint">电量低于 40% 的设备</div>
+            <div class="card">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>节点</th>
+                                <th>CPU</th>
+                                <th>内存</th>
+                                <th>磁盘</th>
+                                <th>健康</th>
+                            </tr>
+                        </thead>
+                        <tbody id="nodesTableBody">
+                            <tr><td colspan="5" class="empty-state">加载中…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </section>
 
-        <section class="controls">
-            <div>
-                <label for="namespace-filter">命名空间</label>
-                <select id="namespace-filter">
-                    <option value="all">全部命名空间</option>
-                </select>
+        <section class="section">
+            <div class="section-header">
+                <h2>Pod 资源热点</h2>
+                <span class="tag" id="podCount">- Pods</span>
             </div>
-            <div>
-                <label for="status-filter">设备健康</label>
-                <select id="status-filter">
-                    <option value="all">全部状态</option>
-                    <option value="ok">健康 (OK)</option>
-                    <option value="warning">警告</option>
-                    <option value="critical">异常</option>
-                </select>
+            <div class="card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>名称</th>
+                            <th>所在节点</th>
+                            <th>CPU 使用</th>
+                            <th>内存使用</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody id="podsTableBody">
+                        <tr><td colspan="5" class="empty-state">加载中…</td></tr>
+                    </tbody>
+                </table>
             </div>
         </section>
 
-        <section class="grid" id="uav-grid">
-            <div class="empty">正在加载 UAV CRD 数据...</div>
+        <section class="section">
+            <div class="section-header">
+                <h2>UAV 遥测与 CRD 概览</h2>
+                <span class="tag" id="uavCount">- UAV</span>
+            </div>
+            <div class="uav-grid" id="uavGrid">
+                <div class="empty-state">加载中…</div>
+            </div>
         </section>
-
-        <section class="raw-section">
-            <h2>CRD 原始数据</h2>
-            <pre id="raw-data">等待数据加载...</pre>
-        </section>
-    </div>
+    </main>
 
     <script>
-        (function () {
-            const grid = document.getElementById('uav-grid');
-            const rawData = document.getElementById('raw-data');
-            const lastUpdate = document.getElementById('last-update');
-            const errorBanner = document.getElementById('error-banner');
-            const refreshBtn = document.getElementById('refresh-btn');
+        const REFRESH_INTERVAL = 15000;
+        const endpoints = {
+            cluster: '/api/v1/metrics/cluster',
+            nodes: '/api/v1/metrics/nodes',
+            pods: '/api/v1/metrics/pods',
+            uavMetrics: '/api/v1/metrics/uav',
+            uavCrd: '/api/v1/crd/uav'
+        };
 
-            const namespaceFilter = document.getElementById('namespace-filter');
-            const statusFilter = document.getElementById('status-filter');
+        const elements = {
+            refreshButton: document.getElementById('refreshButton'),
+            lastUpdated: document.getElementById('lastUpdated'),
+            statusBar: document.getElementById('statusBar'),
+            statusText: document.getElementById('statusText'),
+            summaryNodes: document.querySelector('#summaryNodes .value'),
+            summaryNodesNote: document.querySelector('#summaryNodes .note'),
+            summaryPods: document.querySelector('#summaryPods .value'),
+            summaryPodsNote: document.querySelector('#summaryPods .note'),
+            summaryCpu: document.querySelector('#summaryCpu .value'),
+            summaryCpuNote: document.querySelector('#summaryCpu .note'),
+            summaryUav: document.querySelector('#summaryUav .value'),
+            summaryUavNote: document.querySelector('#summaryUav .note'),
+            nodesTableBody: document.getElementById('nodesTableBody'),
+            podsTableBody: document.getElementById('podsTableBody'),
+            uavGrid: document.getElementById('uavGrid'),
+            nodeCount: document.getElementById('nodeCount'),
+            podCount: document.getElementById('podCount'),
+            uavCount: document.getElementById('uavCount')
+        };
 
-            const clusterNodes = document.getElementById('cluster-nodes');
-            const clusterPods = document.getElementById('cluster-pods');
-            const crdCount = document.getElementById('crd-count');
-            const namespaceCount = document.getElementById('namespace-count');
-            const healthyCount = document.getElementById('healthy-count');
-            const lowBatteryCount = document.getElementById('low-battery-count');
+        function showStatus(message, variant = 'success') {
+            elements.statusText.textContent = message;
+            elements.statusBar.dataset.variant = variant;
+            elements.statusBar.hidden = false;
+        }
 
-            let currentData = [];
+        function hideStatus() {
+            elements.statusBar.hidden = true;
+        }
 
-            async function loadClusterInfo() {
-                try {
-                    const response = await fetch('/api/v1/cluster/status');
-                    if (!response.ok) {
-                        throw new Error('无法获取集群状态');
-                    }
-                    const payload = await response.json();
-                    if (payload.status === 'success' && payload.cluster_info) {
-                        const info = payload.cluster_info;
-                        clusterNodes.textContent = info.nodes ?? '-';
-                        clusterPods.textContent = info.pods ?? '-';
-                    } else {
-                        clusterNodes.textContent = '-';
-                        clusterPods.textContent = '-';
-                    }
-                } catch (err) {
-                    console.warn(err);
-                    clusterNodes.textContent = '-';
-                    clusterPods.textContent = '-';
+        function setLoading(isLoading) {
+            elements.refreshButton.disabled = isLoading;
+            if (isLoading) {
+                elements.refreshButton.textContent = '刷新中…';
+            } else {
+                elements.refreshButton.textContent = '手动刷新';
+            }
+        }
+
+        async function fetchJSON(url) {
+            const response = await fetch(url, { cache: 'no-store' });
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(`请求 ${url} 失败：${response.status} ${text}`);
+            }
+            return response.json();
+        }
+
+        function formatMillicores(m) {
+            if (typeof m !== 'number' || Number.isNaN(m)) return '-';
+            return `${(m / 1000).toFixed(2)} 核`;
+        }
+
+        function formatBytes(bytes) {
+            if (typeof bytes !== 'number' || Number.isNaN(bytes)) return '-';
+            if (bytes === 0) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const index = Math.floor(Math.log(bytes) / Math.log(1024));
+            const value = bytes / Math.pow(1024, index);
+            return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+        }
+
+        function formatPercent(value) {
+            if (typeof value !== 'number' || Number.isNaN(value)) return '-';
+            return `${value.toFixed(1)}%`;
+        }
+
+        function formatDateTime(timestamp) {
+            if (!timestamp) return '-';
+            const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+            if (Number.isNaN(date.getTime())) return '-';
+            return date.toLocaleString('zh-CN', { hour12: false });
+        }
+
+        function updateSummary(cluster, uavMetrics, crdCount) {
+            if (cluster) {
+                const totalNodes = cluster.total_nodes ?? 0;
+                const healthyNodes = cluster.healthy_nodes ?? 0;
+                const totalPods = cluster.total_pods ?? 0;
+                const runningPods = cluster.running_pods ?? 0;
+                const totalCpu = cluster.total_cpu ?? 0;
+                const usedCpu = cluster.used_cpu ?? 0;
+
+                elements.summaryNodes.textContent = `${healthyNodes}/${totalNodes}`;
+                elements.summaryNodesNote.textContent = '健康节点 / 总节点';
+
+                elements.summaryPods.textContent = `${runningPods}/${totalPods}`;
+                elements.summaryPodsNote.textContent = '运行中 Pod / 总 Pod';
+
+                elements.summaryCpu.textContent = formatPercent(cluster.cpu_usage_rate ?? 0);
+                elements.summaryCpuNote.textContent = `${formatMillicores(usedCpu)} / ${formatMillicores(totalCpu)}`;
+
+                elements.nodeCount.textContent = `${totalNodes} 节点`;
+                elements.podCount.textContent = `${totalPods} Pods`;
+            } else {
+                elements.summaryNodes.textContent = '-';
+                elements.summaryPods.textContent = '-';
+                elements.summaryCpu.textContent = '-';
+            }
+
+            const uavEntries = Object.keys(uavMetrics ?? {});
+            elements.summaryUav.textContent = `${uavEntries.length}/${crdCount}`;
+            elements.summaryUavNote.textContent = '活跃 UAV / CRD 记录';
+            elements.uavCount.textContent = `${crdCount} UAV 记录`;
+        }
+
+        function updateNodesTable(nodesMap) {
+            const nodes = Object.values(nodesMap ?? {});
+            if (!nodes.length) {
+                elements.nodesTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无节点数据</td></tr>';
+                return;
+            }
+
+            nodes.sort((a, b) => (b.cpu_usage_rate ?? 0) - (a.cpu_usage_rate ?? 0));
+
+            const rows = nodes.map(node => {
+                const status = node.healthy ? 'healthy' : 'warning';
+                const statusLabel = node.healthy ? 'Healthy' : 'Attention';
+                return `
+                    <tr>
+                        <td>
+                            <div class="metric">
+                                <span class="primary">${node.node_name ?? '-'}</span>
+                                <span class="sub">CPU ${formatMillicores(node.cpu_capacity ?? 0)} · 内存 ${formatBytes(node.memory_capacity ?? 0)}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="metric">
+                                <span class="primary">${formatPercent(node.cpu_usage_rate)}</span>
+                                <span class="sub">${formatMillicores(node.cpu_usage)} / ${formatMillicores(node.cpu_capacity)}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="metric">
+                                <span class="primary">${formatPercent(node.memory_usage_rate)}</span>
+                                <span class="sub">${formatBytes(node.memory_usage)} / ${formatBytes(node.memory_capacity)}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="metric">
+                                <span class="primary">${formatPercent(node.disk_usage_rate)}</span>
+                                <span class="sub">${formatBytes(node.disk_usage)} / ${formatBytes(node.disk_capacity)}</span>
+                            </div>
+                        </td>
+                        <td><span class="status-dot" data-status="${status}">${statusLabel}</span></td>
+                    </tr>
+                `;
+            });
+
+            elements.nodesTableBody.innerHTML = rows.join('');
+        }
+
+        function updatePodsTable(podsMap) {
+            const pods = Object.values(podsMap ?? {});
+            if (!pods.length) {
+                elements.podsTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无 Pod 指标数据</td></tr>';
+                return;
+            }
+
+            pods.sort((a, b) => (b.cpu_usage ?? 0) - (a.cpu_usage ?? 0));
+            const topPods = pods.slice(0, 8);
+
+            const rows = topPods.map(pod => {
+                const name = `${pod.namespace ?? '-'} / ${pod.pod_name ?? '-'}`;
+                const cpu = `${formatMillicores(pod.cpu_usage)}${pod.cpu_limit ? ` / ${formatMillicores(pod.cpu_limit)}` : ''}`;
+                const mem = `${formatBytes(pod.memory_usage)}${pod.memory_limit ? ` / ${formatBytes(pod.memory_limit)}` : ''}`;
+                const status = pod.phase ?? '-';
+                return `
+                    <tr>
+                        <td>
+                            <div class="metric">
+                                <span class="primary">${name}</span>
+                                <span class="sub">重启 ${pod.restarts ?? 0} 次</span>
+                            </div>
+                        </td>
+                        <td>${pod.node_name ?? '-'}</td>
+                        <td>${cpu}</td>
+                        <td>${mem}</td>
+                        <td>${status}</td>
+                    </tr>
+                `;
+            });
+
+            elements.podsTableBody.innerHTML = rows.join('');
+        }
+
+        function updateUavGrid(uavMetrics, uavCrds) {
+            const metricsMap = uavMetrics ?? {};
+            const crdByNode = {};
+            (uavCrds ?? []).forEach(item => {
+                const nodeName = item?.spec?.node_name;
+                if (nodeName) {
+                    crdByNode[nodeName] = item;
                 }
+            });
+
+            const nodeKeys = Array.from(new Set([
+                ...Object.keys(metricsMap),
+                ...Object.keys(crdByNode)
+            ]));
+
+            if (!nodeKeys.length) {
+                elements.uavGrid.innerHTML = '<div class="empty-state">暂无 UAV 上报数据</div>';
+                return;
             }
 
-            function setError(message) {
-                if (!message) {
-                    errorBanner.style.display = 'none';
-                    errorBanner.textContent = '';
-                    return;
-                }
-                errorBanner.textContent = message;
-                errorBanner.style.display = 'block';
-            }
+            nodeKeys.sort();
+            const cards = nodeKeys.map(nodeName => {
+                const metric = metricsMap[nodeName] ?? {};
+                const crd = crdByNode[nodeName];
+                const status = (metric.status || crd?.status?.collection_status || 'unknown').toLowerCase();
+                const badgeVariant = status === 'active' ? 'success' : status === 'warning' ? 'warning' : 'default';
+                const uavId = metric.uav_id || crd?.spec?.uav_id || '未知 UAV';
+                const heartbeat = metric.last_heartbeat || crd?.status?.last_update;
+                const flightMode = metric.state?.flight?.mode || crd?.spec?.flight?.mode || '-';
+                const batteryPercent = metric.state?.battery?.remaining_percent ?? crd?.spec?.battery?.remaining_percent;
+                const gps = metric.state?.gps || crd?.spec?.gps;
 
-            function classifyBattery(level) {
-                if (typeof level !== 'number') return '';
-                if (level >= 70) return 'battery-good';
-                if (level >= 40) return 'battery-medium';
-                return 'battery-low';
-            }
-
-            function normalizeStatus(status) {
-                if (!status) return { text: '未知', css: 'status-warning' };
-                const normalized = String(status).toUpperCase();
-                if (normalized === 'OK' || normalized === 'HEALTHY') {
-                    return { text: normalized, css: 'status-ok' };
-                }
-                if (normalized.includes('WARN')) {
-                    return { text: status, css: 'status-warning' };
-                }
-                return { text: status, css: 'status-critical' };
-            }
-
-            function formatNumber(value, digits = 1) {
-                return typeof value === 'number' ? value.toFixed(digits) : '-';
-            }
-
-            function formatTime(value) {
-                if (!value) return '未知';
-                try {
-                    const date = new Date(value);
-                    if (Number.isNaN(date.getTime())) return '未知';
-                    return date.toLocaleString();
-                } catch {
-                    return '未知';
-                }
-            }
-
-            function updateSummary(data) {
-                crdCount.textContent = data.length;
-
-                const namespaces = new Set();
-                let healthy = 0;
-                let lowBattery = 0;
-
-                data.forEach(item => {
-                    if (item.namespace) {
-                        namespaces.add(item.namespace);
-                    }
-                    const healthStatus = item.spec?.health?.system_status || item.status?.collection_status;
-                    const normalized = normalizeStatus(healthStatus).css;
-                    if (normalized === 'status-ok') {
-                        healthy += 1;
-                    }
-
-                    const battery = item.spec?.battery?.remaining_percent;
-                    if (typeof battery === 'number' && battery < 40) {
-                        lowBattery += 1;
-                    }
-                });
-
-                namespaceCount.textContent = namespaces.size;
-                healthyCount.textContent = healthy;
-                lowBatteryCount.textContent = lowBattery;
-            }
-
-            function updateFilters(data) {
-                const selectedNamespace = namespaceFilter.value;
-                namespaceFilter.innerHTML = '<option value="all">全部命名空间</option>';
-
-                const namespaces = Array.from(
-                    new Set(data.map(item => item.namespace).filter(Boolean))
-                ).sort();
-
-                namespaces.forEach(ns => {
-                    const option = document.createElement('option');
-                    option.value = ns;
-                    option.textContent = ns;
-                    namespaceFilter.appendChild(option);
-                });
-
-                if (selectedNamespace && [...namespaceFilter.options].some(opt => opt.value === selectedNamespace)) {
-                    namespaceFilter.value = selectedNamespace;
-                }
-            }
-
-            function renderCards(data) {
-                if (!data.length) {
-                    grid.innerHTML = '<div class="empty">当前筛选条件下没有可显示的 UAV CRD 数据。</div>';
-                    return;
-                }
-
-                const fragment = document.createDocumentFragment();
-
-                data.forEach(item => {
-                    const spec = item.spec || {};
-                    const status = item.status || {};
-                    const healthStatus = spec.health?.system_status || status.collection_status || '未知';
-                    const statusInfo = normalizeStatus(healthStatus);
-                    const batteryLevel = spec.battery?.remaining_percent;
-                    const batteryClass = classifyBattery(batteryLevel);
-                    const gps = spec.gps || {};
-                    const latitude = typeof gps.latitude === 'number' ? gps.latitude.toFixed(4) : '-';
-                    const longitude = typeof gps.longitude === 'number' ? gps.longitude.toFixed(4) : '-';
-                    const gpsText = latitude !== '-' && longitude !== '-' ? `${latitude}, ${longitude}` : '-';
-                    const satelliteCount = typeof gps.satellite_count === 'number' ? gps.satellite_count : '-';
-
-                    const card = document.createElement('article');
-                    card.className = 'uav-card';
-                    card.innerHTML = `
+                return `
+                    <article class="uav-card">
                         <div class="uav-header">
                             <div>
-                                <div class="uav-id">${spec.uav_id || item.name}</div>
-                                <div class="uav-meta">命名空间：${item.namespace || 'default'} · 节点：${spec.node_name || '-'}</div>
+                                <h3>${uavId}</h3>
+                                <span class="sub">节点：${nodeName}</span>
                             </div>
-                            <div class="status-badge ${statusInfo.css}">${statusInfo.text}</div>
+                            <span class="badge" data-variant="${badgeVariant}">
+                                <span class="status-dot" data-status="${status === 'active' ? 'healthy' : 'warning'}"></span>
+                                ${status.toUpperCase()}
+                            </span>
                         </div>
-                        <div class="metrics">
-                            <div class="metric">
-                                <span>飞行模式</span>
-                                <strong>${spec.flight?.mode || '-'}</strong>
-                            </div>
-                            <div class="metric">
-                                <span>是否解锁</span>
-                                <strong>${spec.flight?.armed ? '已解锁' : '未解锁'}</strong>
-                            </div>
-                            <div class="metric">
-                                <span>电池电量</span>
-                                <strong class="${batteryClass}">${typeof batteryLevel === 'number' ? batteryLevel.toFixed(0) + '%' : '-'}</strong>
-                            </div>
-                            <div class="metric">
-                                <span>电池温度</span>
-                                <strong>${formatNumber(spec.battery?.temperature, 1)}°C</strong>
-                            </div>
-                            <div class="metric">
-                                <span>地速</span>
-                                <strong>${formatNumber(spec.flight?.ground_speed, 2)} m/s</strong>
-                            </div>
-                            <div class="metric">
-                                <span>卫星数量</span>
-                                <strong>${satelliteCount}</strong>
-                            </div>
-                            <div class="metric">
-                                <span>GPS 坐标</span>
-                                <strong>${gpsText}</strong>
-                            </div>
-                            <div class="metric">
-                                <span>最后更新</span>
-                                <strong>${formatTime(status.last_update || item.update_time)}</strong>
-                            </div>
+                        <div class="details">
+                            <span><strong>飞行模式</strong>${flightMode}</span>
+                            <span><strong>电量</strong>${batteryPercent !== undefined ? `${batteryPercent.toFixed ? batteryPercent.toFixed(1) : batteryPercent}%` : '-'}</span>
+                            <span><strong>心跳</strong>${formatDateTime(heartbeat)}</span>
+                            <span><strong>心跳间隔</strong>${metric.heartbeat_interval_seconds ? `${metric.heartbeat_interval_seconds}s` : '-'}</span>
+                            <span><strong>经纬度</strong>${gps ? `${gps.latitude?.toFixed?.(4) ?? '-'} , ${gps.longitude?.toFixed?.(4) ?? '-'}` : '-'}</span>
+                            <span><strong>高度</strong>${gps?.altitude !== undefined ? `${gps.altitude} m` : '-'}</span>
                         </div>
-                    `;
-
-                    fragment.appendChild(card);
-                });
-
-                grid.innerHTML = '';
-                grid.appendChild(fragment);
-            }
-
-            function filterData() {
-                const ns = namespaceFilter.value;
-                const statusValue = statusFilter.value;
-
-                return currentData.filter(item => {
-                    const spec = item.spec || {};
-                    const status = spec.health?.system_status || item.status?.collection_status;
-                    const normalized = normalizeStatus(status).css;
-
-                    const namespaceMatch = ns === 'all' || item.namespace === ns;
-                    const statusMatch = statusValue === 'all' ||
-                        (statusValue === 'ok' && normalized === 'status-ok') ||
-                        (statusValue === 'warning' && normalized === 'status-warning') ||
-                        (statusValue === 'critical' && normalized === 'status-critical');
-
-                    return namespaceMatch && statusMatch;
-                });
-            }
-
-            async function loadUAVData() {
-                setError('');
-                grid.innerHTML = '<div class="empty">正在更新 UAV CRD 数据...</div>';
-
-                try {
-                    const response = await fetch('/api/v1/crd/uav');
-                    if (!response.ok) {
-                        throw new Error(`接口返回错误：${response.status}`);
-                    }
-
-                    const payload = await response.json();
-                    if (payload.status !== 'success' || !Array.isArray(payload.data)) {
-                        throw new Error(payload.message || 'CRD 数据格式不正确');
-                    }
-
-                    currentData = payload.data;
-                    updateSummary(currentData);
-                    updateFilters(currentData);
-                    renderCards(filterData());
-                    rawData.textContent = JSON.stringify(currentData, null, 2);
-                    lastUpdate.textContent = `最后刷新：${new Date().toLocaleString()}`;
-                } catch (error) {
-                    console.error(error);
-                    setError(`数据加载失败：${error.message}`);
-                    grid.innerHTML = '<div class="empty">无法加载 UAV CRD 数据，请稍后重试。</div>';
-                    rawData.textContent = '数据加载失败。';
-                }
-            }
-
-            namespaceFilter.addEventListener('change', () => {
-                renderCards(filterData());
+                        <span class="sub">CRD 更新时间：${formatDateTime(crd?.status?.last_update)}</span>
+                    </article>
+                `;
             });
 
-            statusFilter.addEventListener('change', () => {
-                renderCards(filterData());
-            });
+            elements.uavGrid.innerHTML = cards.join('');
+        }
 
-            refreshBtn.addEventListener('click', () => {
-                loadUAVData();
-            });
+        async function loadDashboard(auto = false) {
+            setLoading(!auto);
+            try {
+                const [clusterRes, nodesRes, podsRes, uavMetricsRes, uavCrdRes] = await Promise.all([
+                    fetchJSON(endpoints.cluster).catch(() => null),
+                    fetchJSON(endpoints.nodes),
+                    fetchJSON(endpoints.pods),
+                    fetchJSON(endpoints.uavMetrics),
+                    fetchJSON(endpoints.uavCrd)
+                ]);
 
-            loadClusterInfo();
-            loadUAVData();
-            setInterval(() => {
-                loadClusterInfo();
-                loadUAVData();
-            }, 30000);
-        })();
+                const cluster = clusterRes?.data ?? null;
+                const nodes = nodesRes?.data ?? {};
+                const pods = podsRes?.data ?? {};
+                const uavMetrics = uavMetricsRes?.data ?? {};
+                const uavCrds = uavCrdRes?.data ?? [];
+
+                updateSummary(cluster, uavMetrics, uavCrds.length);
+                updateNodesTable(nodes);
+                updatePodsTable(pods);
+                updateUavGrid(uavMetrics, uavCrds);
+
+                const now = new Date();
+                elements.lastUpdated.textContent = `最后更新：${formatDateTime(now)}`;
+                hideStatus();
+            } catch (error) {
+                console.error(error);
+                showStatus(error.message, 'error');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        elements.refreshButton.addEventListener('click', () => loadDashboard(false));
+
+        loadDashboard(false);
+        setInterval(() => {
+            loadDashboard(true);
+        }, REFRESH_INTERVAL);
     </script>
 </body>
 </html>

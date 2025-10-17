@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-llm-scheduler
+  namespace: default
+  labels:
+    app: k8s-llm-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-llm-scheduler
+  template:
+    metadata:
+      labels:
+        app: k8s-llm-scheduler
+    spec:
+      serviceAccountName: k8s-llm-monitor
+      containers:
+        - name: scheduler
+          image: k8s-llm-scheduler:dev
+          imagePullPolicy: IfNotPresent
+          command:
+            - "./scheduler"
+          args:
+            - "-config"
+            - "/app/configs/config.yaml"
+            - "-interval"
+            - "10s"
+          volumeMounts:
+            - name: config
+              mountPath: /app/configs/config.yaml
+              subPath: config.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: k8s-llm-monitor-config

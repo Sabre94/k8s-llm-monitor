@@ -1,0 +1,16 @@
+apiVersion: scheduler.io/v1
+kind: SchedulingRequest
+metadata:
+  name: test-compute-task
+  namespace: default
+spec:
+  workload:
+    name: ai-training-job
+    namespace: default
+    type: compute-intensive
+  minBatteryPercent: 50
+  preferredNodes:
+    - k3d-k8s-llm-monitor-agent-0
+  annotations:
+    priority: "high"
+    deadline: "2025-10-18T00:00:00Z"

@@ -243,6 +243,14 @@ func (c *Client) Namespaces() []string {
 	return c.namespaces
 }
 
+// RESTConfig 返回底层的 REST 配置
+func (c *Client) RESTConfig() (*rest.Config, error) {
+	if c.restConfig == nil {
+		return nil, fmt.Errorf("rest config not initialized")
+	}
+	return c.restConfig, nil
+}
+
 // ListUAVMetricsCRD 获取UAV指标CRD数据
 func (c *Client) ListUAVMetricsCRD(ctx context.Context, namespace string) ([]*models.CustomResourceInfo, error) {
 	if c.dynamic == nil {

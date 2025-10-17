@@ -1,0 +1,15 @@
+apiVersion: scheduler.io/v1
+kind: SchedulingRequest
+metadata:
+  name: edge-ai-task
+  namespace: default
+spec:
+  workload:
+    name: image-recognition
+    namespace: default
+    type: ai-inference
+  minBatteryPercent: 80
+  # 不指定 preferredNodes，让调度器自己选择
+  annotations:
+    task-type: "edge-ai"
+    gpu-required: "true"

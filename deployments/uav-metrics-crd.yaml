@@ -30,6 +30,8 @@ spec:
                     type: number
                   altitude:
                     type: number
+                  relative_altitude:
+                    type: number
                   satellite_count:
                     type: integer
                   fix_type:
@@ -41,6 +43,8 @@ spec:
                     type: number
                   remaining_percent:
                     type: number
+                  remaining_capacity:
+                    type: number
                   temperature:
                     type: number
               flight:
@@ -51,6 +55,8 @@ spec:
                   armed:
                     type: boolean
                   ground_speed:
+                    type: number
+                  vertical_speed:
                     type: number
               health:
                 type: object

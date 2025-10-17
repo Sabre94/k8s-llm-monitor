@@ -1,0 +1,81 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: schedulingrequests.scheduler.io
+spec:
+  group: scheduler.io
+  names:
+    plural: schedulingrequests
+    singular: schedulingrequest
+    kind: SchedulingRequest
+    shortNames:
+      - sreq
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                workload:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: "目标工作负载名称"
+                    namespace:
+                      type: string
+                      description: "目标工作负载命名空间"
+                    type:
+                      type: string
+                      description: "任务类型或说明"
+                  required:
+                    - name
+                    - namespace
+                minBatteryPercent:
+                  type: number
+                  minimum: 0
+                  maximum: 100
+                  description: "所需 UAV 最低电量百分比"
+                preferredNodes:
+                  type: array
+                  items:
+                    type: string
+                  description: "优先考虑的节点列表"
+                annotations:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: "调度额外参数"
+                createdAt:
+                  type: string
+                  format: date-time
+              required:
+                - workload
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum:
+                    - Pending
+                    - Assigned
+                    - Failed
+                assignedNode:
+                  type: string
+                assignedUAV:
+                  type: string
+                score:
+                  type: number
+                message:
+                  type: string
+                lastUpdated:
+                  type: string
+                  format: date-time
+      subresources:
+        status: {}

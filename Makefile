@@ -7,6 +7,7 @@ all: build
 build:
 	go build -o bin/server cmd/server/main.go
 	go build -o bin/agent cmd/agent/main.go
+	go build -o bin/scheduler cmd/scheduler/main.go
 
 # 运行应用
 run: build

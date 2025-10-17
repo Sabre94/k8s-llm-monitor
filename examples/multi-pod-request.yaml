@@ -1,0 +1,19 @@
+# 这个请求只会分配1个节点，不会自动计算需要几个
+apiVersion: scheduler.io/v1
+kind: SchedulingRequest
+metadata:
+  name: distributed-training
+  namespace: default
+spec:
+  workload:
+    name: multi-gpu-training
+    namespace: default
+    type: ml-training
+  minBatteryPercent: 60
+  preferredNodes:
+    - k3d-k8s-llm-monitor-agent-0
+    - k3d-k8s-llm-monitor-agent-1
+  annotations:
+    gpu-count: "2"
+    memory-requirement: "16Gi"
+    # 但调度器不会用这些信息计算需要几个Pod

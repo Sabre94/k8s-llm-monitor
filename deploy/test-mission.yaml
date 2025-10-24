@@ -1,0 +1,82 @@
+# 测试任务Pod示例
+apiVersion: v1
+kind: Pod
+metadata:
+  name: surveillance-mission-1
+  namespace: default
+  labels:
+    app: surveillance-mission
+    mission-type: surveillance
+  annotations:
+    # 调度��配置注解
+    uav-scheduler/algorithm: "nsga2"
+    uav-scheduler/task-type: "surveillance"
+    uav-scheduler/target-coverage: "0.8"
+    uav-scheduler/priority: "high"
+    uav-scheduler/objectives: "battery,latency,utilization,count"
+    uav-scheduler/max-uavs: "5"
+    uav-scheduler/min-battery: "50.0"
+    uav-scheduler/max-latency: "200.0"
+spec:
+  restartPolicy: Never
+  containers:
+  - name: mission-container
+    image: busybox:1.35
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      echo "🚁 侦察任务开始"
+      echo "任务ID: $(hostname)"
+      echo "开始时间: $(date)"
+      echo ""
+      echo "等待分配的UAV节点执行任务..."
+      echo "任务将持续执行 60 分钟"
+      sleep 3600
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "128Mi"
+        cpu: "200m"
+---
+# 紧急任务示例
+apiVersion: v1
+kind: Pod
+metadata:
+  name: emergency-mission-1
+  namespace: default
+  labels:
+    app: emergency-mission
+    mission-type: emergency
+  annotations:
+    uav-scheduler/algorithm: "nsga2"
+    uav-scheduler/task-type: "emergency"
+    uav-scheduler/target-coverage: "0.9"  # 更高的覆盖率要求
+    uav-scheduler/priority: "critical"
+    uav-scheduler/objectives: "battery,latency,utilization,count"
+    uav-scheduler/max-uavs: "8"  # 允许更多UAV
+    uav-scheduler/min-battery: "70.0"  # 更高的电池要求
+    uav-scheduler/max-latency: "100.0"  # 更低的延迟要求
+spec:
+  restartPolicy: Never
+  containers:
+  - name: mission-container
+    image: busybox:1.35
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      echo "🚨 紧急任务开始"
+      echo "任务ID: $(hostname)"
+      echo "开始时间: $(date)"
+      echo "任务类型: 紧急救援"
+      echo ""
+      echo "执行高优先级任务..."
+      sleep 1800
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "128Mi"
+        cpu: "200m"

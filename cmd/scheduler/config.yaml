@@ -1,0 +1,71 @@
+# UAV Scheduler Configuration
+
+# 基础配置
+name: "uav-scheduler"
+listen_addr: ":8080"
+
+# Kubernetes配置
+k8s:
+  namespace: "default"
+  in_cluster: false
+  kubeconfig: "/Users/xiabin/.kube/config"  # 如果不在集群内运行，设置kubeconfig路径
+
+# 算法配置
+algorithms:
+  # NSGA-II算法配置
+  nsga2:
+    population_size: 50      # 种群大小
+    max_generations: 20      # 最大迭代次数
+    crossover_prob: 0.9      # 交叉概率
+    grid_density: 40         # 网格密度（用于覆盖面积计算）
+    python_path: "python3"   # Python解释器路径
+    script_path: "RUN2.py"   # NSGA-II脚本路径
+    temp_dir: "/tmp"         # 临时文件目录
+
+  # 演示配置（放在algorithms下）
+  demo:
+    enabled: true             # 是否启用演示模式
+    delay: "5s"               # 演示启动延迟
+
+  # 可以添加更多算法配置
+  # greedy:
+  #   task_type: "sustain"
+  #   target_coverage: 0.9
+  #   grid_density: 50
+
+# 数据提供者配置
+data_providers:
+  # CRD数据提供者
+  crd:
+    enabled: true
+    watch_interval: "30s"    # 数据监听间隔
+    cache_ttl: "2m"          # 缓存TTL
+
+  # 可以添加其他数据源
+  # prometheus:
+  #   enabled: false
+  #   address: "http://prometheus:9090"
+
+# 缓存配置
+cache:
+  enabled: true
+  ttl: "5m"                 # 缓存TTL
+  max_size: 1000            # 最大缓存条目数
+
+# 日志配置
+logging:
+  level: "info"              # 日志级别: debug, info, warn, error
+  format: "json"             # 日志格式: json, text
+  output: "stdout"           # 输出: stdout, stderr, file
+
+# 性能配置
+performance:
+  max_concurrent_schedules: 10  # 最大并发调度数
+  schedule_timeout: "30s"       # 调度超时时间
+  cleanup_interval: "1m"        # 清理任务间隔
+
+# 监控配置
+monitoring:
+  metrics_enabled: true      # 是否启用指标
+  health_check_enabled: true  # 是否启用健康检查
+  status_port: 8081          # 状态端口

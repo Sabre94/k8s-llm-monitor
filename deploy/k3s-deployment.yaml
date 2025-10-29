@@ -1,0 +1,229 @@
+# K3s环境专用部署配置
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: uav-system
+---
+# RBAC权限
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: uav-scheduler
+  namespace: uav-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: uav-scheduler
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: ["monitor.k8s-llm-monitor.com"]
+  resources: ["uavmetrics"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: uav-scheduler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: uav-scheduler
+subjects:
+- kind: ServiceAccount
+  name: uav-scheduler
+  namespace: uav-system
+---
+# UAVMetric CRD
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: uavmetrics.monitor.k8s-llm-monitor.com
+spec:
+  group: monitor.k8s-llm-monitor.com
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              nodeId:
+                type: string
+              battery:
+                type: number
+                minimum: 0
+                maximum: 100
+              latency:
+                type: number
+                minimum: 0
+              utilization:
+                type: number
+                minimum: 0
+                maximum: 100
+              gps:
+                type: array
+                items:
+                  type: number
+                minItems: 2
+                maxItems: 2
+              radius:
+                type: number
+                minimum: 0
+              status:
+                type: string
+                enum: ["ready", "busy", "maintenance", "offline"]
+  scope: Namespaced
+  names:
+    plural: uavmetrics
+    singular: uavmetric
+    kind: UAVMetric
+---
+# 调度器部署
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: uav-scheduler
+  namespace: uav-system
+  labels:
+    app: uav-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: uav-scheduler
+  template:
+    metadata:
+      labels:
+        app: uav-scheduler
+    spec:
+      serviceAccountName: uav-scheduler
+      containers:
+      - name: uav-scheduler
+        image: uav-scheduler:k3s  # K3s专用镜像
+        imagePullPolicy: Never
+        command: ["./uav-scheduler"]
+        args: ["-config=/etc/config/config.yaml", "-log-level=info"]
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8081
+          name: status
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+        - name: temp
+          mountPath: /tmp
+        resources:
+          requests:
+            memory: "128Mi"   # K3s资源限制
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 60  # K3s启动较慢
+          periodSeconds: 15
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: uav-scheduler-config
+      - name: temp
+        emptyDir: {}
+      nodeSelector:
+        kubernetes.io/arch: "amd64"  # 确保在正确架构运行
+---
+# 服务配置
+apiVersion: v1
+kind: Service
+metadata:
+  name: uav-scheduler-service
+  namespace: uav-system
+  labels:
+    app: uav-scheduler
+spec:
+  selector:
+    app: uav-scheduler
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+  - port: 8081
+    targetPort: 8081
+    name: status
+  type: NodePort  # K3s使用NodePort便于访问
+---
+# 示例UAV节点数据
+apiVersion: monitor.k8s-llm-monitor.com/v1
+kind: UAVMetric
+metadata:
+  name: uav-node-1
+  namespace: uav-system
+  labels:
+    type: uav
+    zone: zone-a
+    hardware: standard
+spec:
+  nodeId: "uav-edge-node-1"
+  battery: 85.5
+  latency: 45.2
+  utilization: 35.8
+  gps: [31.2304, 121.4737]  # 上海坐标
+  radius: 480.9
+  status: "ready"
+---
+apiVersion: monitor.k8s-llm-monitor.com/v1
+kind: UAVMetric
+metadata:
+  name: uav-node-2
+  namespace: uav-system
+  labels:
+    type: uav
+    zone: zone-b
+    hardware: edge
+spec:
+  nodeId: "uav-edge-node-2"
+  battery: 72.3
+  latency: 78.5
+  utilization: 42.1
+  gps: [31.2359, 121.4805]
+  radius: 399.4
+  status: "ready"
+---
+apiVersion: monitor.k8s-llm-monitor.com/v1
+kind: UAVMetric
+metadata:
+  name: uav-node-3
+  namespace: uav-system
+  labels:
+    type: uav
+    zone: zone-a
+    hardware: standard
+spec:
+  nodeId: "uav-edge-node-3"
+  battery: 91.2
+  latency: 32.8
+  utilization: 28.5
+  gps: [31.2235, 121.4568]
+  radius: 305.6
+  status: "ready"

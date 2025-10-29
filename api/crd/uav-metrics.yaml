@@ -1,0 +1,149 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: uavmetrics.monitoring.io
+spec:
+  group: monitoring.io
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              node_id:
+                type: string
+                description: "节点唯一标识符"
+              node_name:
+                type: string
+                description: "节点名称"
+              node_ip:
+                type: string
+                description: "节点IP地址"
+              gps:
+                type: object
+                description: "GPS位置信息"
+                properties:
+                  latitude:
+                    type: number
+                    description: "纬度"
+                  longitude:
+                    type: number
+                    description: "经度"
+                  altitude:
+                    type: number
+                    description: "高度"
+                  accuracy:
+                    type: number
+                    description: "GPS精度"
+                  satellite_count:
+                    type: integer
+                    description: "卫星数量"
+              battery:
+                type: object
+                description: "电池信息"
+                properties:
+                  voltage:
+                  type: number
+                  description: "电压"
+                  remaining_percent:
+                    type: number
+                  description: "剩余电量百分比"
+                  remaining_capacity:
+                    type: number
+                  description: "剩余容量"
+                  temperature:
+                    type: number
+                  description: "电池温度"
+                  current:
+                    type: number
+                  description: "电流"
+              flight:
+                type: object
+                description: "飞行状态"
+                properties:
+                  mode:
+                    type: string
+                  armed:
+                    type: boolean
+                  ground_speed:
+                    type: number
+                  vertical_speed:
+                    type: number
+                  heading:
+                    type: number
+              health:
+                type: object
+                description: "健康状态"
+                properties:
+                  system_status:
+                    type: string
+                  error_count:
+                    type: integer
+                  warning_count:
+                    type: integer
+                  last_heartbeat:
+                    type: string
+                  status:
+                    type: string
+                    enum: ["ready", "busy", "maintenance", "offline", "error"]
+              network:
+                type: object
+                description: "网络信息"
+                properties:
+                  latency:
+                    type: number
+                  packet_loss:
+                    type: number
+                  bandwidth:
+                    type: number
+                  signal_strength:
+                    type: number
+              performance:
+                type: object
+                description: "性能指标"
+                properties:
+                  cpu_usage:
+                    type: number
+                  memory_usage:
+                    type: number
+                  disk_usage:
+                    type: number
+                  uptime:
+                    type: string
+              mission:
+                type: object
+                description: "任务信息"
+                properties:
+                  mission_id:
+                    type: string
+                  mission_type:
+                    type: string
+                  mission_status:
+                    type: string
+                  waypoints:
+                    type: array
+                  current_waypoint:
+                    type: integer
+              labels:
+                type: object
+                description: "标签"
+                additionalProperties:
+                  type: string
+              annotations:
+                type: object
+                description: "注解"
+                additionalProperties:
+                  type: string
+  scope: Namespaced
+  names:
+    plural: uavmetrics
+    singular: uavmetric
+    kind: UAVMetric
+    shortNames:
+    - uav
+    - uavm

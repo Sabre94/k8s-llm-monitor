@@ -1,0 +1,92 @@
+# K3s环境测试任务
+apiVersion: v1
+kind: Pod
+metadata:
+  name: k3s-surveillance-mission
+  namespace: uav-system
+  labels:
+    app: surveillance-mission
+    mission-type: surveillance
+  annotations:
+    uav-scheduler/algorithm: "nsga2"
+    uav-scheduler/task-type: "surveillance"
+    uav-scheduler/target-coverage: "0.75"  # 适应K3s性能，稍微降低要求
+    uav-scheduler/priority: "high"
+    uav-scheduler/objectives: "battery,latency,utilization,count"
+    uav-scheduler/max-uavs: "3"  # K3s环境限制节点数量
+    uav-scheduler/min-battery: "40.0"  # 适应边缘环境
+    uav-scheduler/max-latency: "300.0"
+spec:
+  restartPolicy: Never
+  containers:
+  - name: mission-container
+    image: busybox:1.35
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      echo "🚁 K3s UAV侦察任务开始"
+      echo "任务ID: $(hostname)"
+      echo "开始时间: $(date)"
+      echo "集群环境: K3s"
+      echo "命名空间: uav-system"
+      echo ""
+      echo "📍 任务位置信息："
+      echo "节点IP: $(hostname -i)"
+      echo "Pod名称: $(hostname)"
+      echo ""
+      echo "🔋 模拟UAV任务执行..."
+      echo "任务将持续执行 30 分钟"
+      echo "每30秒报告一次状态"
+
+      for i in {1..60}; do
+        echo "[$(date '+%H:%M:%S')] 任务状态: 执行中 ($i/60)"
+        sleep 30
+      done
+
+      echo "✅ 任务完成"
+    resources:
+      requests:
+        memory: "32Mi"   # K3s最小资源请求
+        cpu: "50m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
+---
+# 贪心算法测试任务
+apiVersion: v1
+kind: Pod
+metadata:
+  name: k3s-greedy-mission
+  namespace: uav-system
+  labels:
+    app: greedy-mission
+    mission-type: patrol
+  annotations:
+    uav-scheduler/algorithm: "greedy"  # 使用轻量级算法
+    uav-scheduler/task-type: "patrol"
+    uav-scheduler/target-coverage: "0.8"
+    uav-scheduler/priority: "normal"
+    uav-scheduler/objectives: "battery,latency,utilization,count"
+    uav-scheduler/max-uavs: "2"
+spec:
+  restartPolicy: Never
+  containers:
+  - name: mission-container
+    image: busybox:1.35
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      echo "🚁 K3s UAV巡逻任务开始"
+      echo "算法: 贪心算法"
+      echo "任务类型: 巡逻"
+      echo ""
+      echo "执行轻量级巡逻任务..."
+      sleep 1800
+      echo "✅ 巡逻任务完成"
+    resources:
+      requests:
+        memory: "32Mi"
+        cpu: "50m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"

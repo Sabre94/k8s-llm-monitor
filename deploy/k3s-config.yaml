@@ -1,0 +1,72 @@
+# K3s环境专用配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: uav-scheduler-config
+  namespace: default
+data:
+  config.yaml: |
+    # UAV Scheduler Configuration for K3s
+
+    # 基础配置
+    name: "uav-scheduler"
+    listen_addr: ":8080"
+
+    # Kubernetes配置 - K3s环境
+    k8s:
+      namespace: "default"
+      in_cluster: true
+      kubeconfig: ""  # K3s集群内使用
+
+    # 算法配置 - 针对资源受限环境优化
+    algorithms:
+      nsga2:
+        population_size: 30      # 减少种群大小节省资源
+        max_generations: 15      # 减少迭代次数
+        crossover_prob: 0.9
+        grid_density: 30         # 减少网格密度
+        python_path: "python3"
+        script_path: "RUN2.py"
+        temp_dir: "/tmp"
+
+      # 轻量级贪心算法
+      greedy:
+        strategy: "battery"
+        max_uavs: 8
+        min_battery: 40.0
+        max_latency: 300.0
+
+      demo:
+        enabled: true
+        delay: "10s"  # K3s启动较慢，增加延迟
+
+    # 数据提供者配置
+    data_providers:
+      crd:
+        enabled: true
+        watch_interval: "45s"    # 适应K3s性能
+        cache_ttl: "5m"          # 增加缓存时间
+
+    # 缓存配置 - 适应资源限制
+    cache:
+      enabled: true
+      ttl: "10m"                # 增加缓存时间
+      max_size: 500             # 减少缓存大小
+
+    # 日志配置
+    logging:
+      level: "info"
+      format: "json"
+      output: "stdout"
+
+    # 性能配置 - K3s优化
+    performance:
+      max_concurrent_schedules: 5   # 减少并发数
+      schedule_timeout: "60s"       # 增加超时时间
+      cleanup_interval: "2m"        # 增加清理间隔
+
+    # 监控配置
+    monitoring:
+      metrics_enabled: true
+      health_check_enabled: true
+      status_port: 8081

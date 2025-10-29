@@ -1,0 +1,71 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: uavroutings.monitoring.io
+spec:
+  group: monitoring.io
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              source_node:
+                type: string
+                description: "源节点ID"
+              routing_strategy:
+                type: string
+                description: "路由策略"
+                enum: ["distance-based", "battery-based", "latency-based", "hybrid"]
+              target_nodes:
+                type: array
+                description: "目标节点列表"
+                items:
+                  type: object
+                  properties:
+                    node_id:
+                      type: string
+                    weight:
+                      type: integer
+                    priority:
+                      type: integer
+                    conditions:
+                      type: object
+                      properties:
+                        max_distance:
+                          type: number
+                        min_battery:
+                          type: number
+                        max_latency:
+                          type: number
+              routing_table:
+                type: object
+                description: "路由表"
+                additionalProperties:
+                  type: object
+                  properties:
+                    target_id:
+                      type: string
+                    ip_address:
+                      type: string
+                    distance:
+                      type: number
+                    score:
+                      type: number
+                    weight:
+                      type: integer
+                    last_updated:
+                      type: string
+  scope: Namespaced
+  names:
+    plural: uavroutings
+    singular: uavrouting
+    kind: UAVRouting
+    shortNames:
+    - routing
+    - route

@@ -1,132 +1,227 @@
-# UAV调度系统 - 快速启动指南
+# 🚀 UAV Monitor - 快速开始指南
 
-## 🚀 5分钟快速体验
+## 📋 概述
 
-### 前置要求
-- ✅ Kubernetes集群 (minikube, k3s, 或其他)
-- ✅ kubectl配置正确
-- ✅ Docker (用于构建镜像)
+本指南帮助您在新的Kubernetes集群中快速部署UAV Monitor系统，实现GPS距离路由功能。
 
-### 一键部署
+## 🎯 前置要求
 
-```bash
-# 1. 克隆项目
-git clone <repository-url>
-cd k8s-llm-monitor
+- Kubernetes 1.21+ (k3d/minikube/RKE等)
+- kubectl 已配置
+- 可选: Docker (用于构建自定义镜像)
 
-# 2. 快速部署（自动创建所有必要资源）
-./deploy/quick-start.sh
+## ⚡ 5分钟快速部署
 
-# 3. 构建调度器镜像（在新终端）
-cd cmd/scheduler
-docker build -t uav-scheduler:latest .
-```
-
-### 验证部署
+### 1. 创建命名空间
 
 ```bash
-# 检查调度器状态
-kubectl get pods -l app=uav-scheduler
-
-# 查看UAV节点数据
-kubectl get uavmetrics
-
-# 查看调度日志
-kubectl logs -f deployment/uav-scheduler
+kubectl create namespace uav-demo
+kubectl create namespace uav-system
 ```
 
-### 创建测试任务
+### 2. 部署Istio Ambient模式
 
 ```bash
-kubectl apply -f deploy/test-mission.yaml
+# 下载Istio
+curl -L https://istio.io/downloadIstio | sh -s 1.27.3
+export PATH="$PATH:$PWD/istio-1.27.3/bin"
+
+# 安装Ambient模式
+istioctl install --set profile=ambient -y
+
+# 为UAV命名空间启用Ambient
+kubectl label namespace uav-demo istio.io/rev=default
+kubectl label namespace uav-system istio.io/rev=default
 ```
 
-预期看到调度器自动选择最优UAV节点集合执行任务！
-
-## 📦 详细部署选项
-
-### 选项1: 本地测试模式
+### 3. 部署CRD定义
 
 ```bash
-cd cmd/scheduler
-go build -o uav-scheduler
-./uav-scheduler -config=config.yaml -dry-run=true -log-level=info
+# 部署UAV监控CRD
+kubectl apply -f api/crd/uav-metrics.yaml
+
+# 部署UAV路由CRD
+kubectl apply -f api/crd/uav-routing.yaml
+
+# 验证CRD
+kubectl get crd | grep uav
 ```
 
-### 选项2: 完整Kubernetes部署
+### 4. 部署UAV节点
 
 ```bash
-# 1. 构建镜像
-docker build -t your-registry/uav-scheduler:latest -f cmd/scheduler/Dockerfile .
+# 部署3个UAV节点 (使用预构建镜像)
+kubectl apply -f infrastructure/kubernetes/uav-nodes.yaml
 
-# 2. 推送镜像
-docker push your-registry/uav-scheduler:latest
-
-# 3. 修改部署文件中的镜像地址
-# 编辑 deploy/quick-start.sh 中的镜像名称
-
-# 4. 运行部署脚本
-./deploy/quick-start.sh production
+# 等待节点就绪
+kubectl wait --for=condition=ready pod -l app=uav-node -n uav-demo --timeout=60s
 ```
 
-## 🎯 调度流程验证
+### 5. 配置智能路由
 
-当你看到类似以下的日志时，说明调度器正在工作：
-
-```
-{"level":"info","msg":"Demo: Single pod scheduling"}
-{"level":"info","msg":"NSGA-II optimization completed","selected_nodes":["uav-node-3","uav-node-1","uav-node-2"]}
-{"level":"info","msg":"Mission scheduling completed successfully","node_count":3}
-```
-
-这表示：
-- ✅ NSGA-II算法成功优化
-- ✅ 自动选择了3个最优UAV节点
-- ✅ 节点集合已绑定到任务
-
-## 🐛 常见问题
-
-**Q: 调度器Pod无法启动？**
 ```bash
-# 检查Pod状态
-kubectl describe pod -l app=uav-scheduler
+# 部署路由规则
+kubectl apply -f infrastructure/istio/ambient/routing-rules.yaml
 
-# 确保镜像已构建
-docker images | grep uav-scheduler
+# 验证路由配置
+kubectl get virtualservices -n uav-demo
 ```
 
-**Q: 没有看到demo执行？**
+### 6. 测试路由功能
+
 ```bash
-# 检查配置中的demo设置
-kubectl get configmap uav-scheduler-config -o yaml
+# 创建测试客户端
+kubectl run test-client --image=curlimages/curl:latest -n uav-demo --restart=Never -- sleep=3600
 
-# 手动重启调度器
-kubectl rollout restart deployment/uav-scheduler
+# 测试GPS距离路由
+kubectl exec -it test-client -n uav-demo -- \
+  curl -H "x-source-location: downtown-la" \
+  http://uav-smart-service.uav-demo.svc.cluster.local
 ```
 
-**Q: UAVMetric CRD不存在？**
+## 🧪 验证部署
+
+### 检查Pod状态
+
+```bash
+kubectl get pods -n uav-demo
+kubectl get pods -n istio-system
+```
+
+### 检查路由决策
+
+```bash
+# 查看UAV节点状态
+kubectl get uavmetrics -n uav-demo
+
+# 查看路由配置
+kubectl get uavroutings -n uav-demo
+```
+
+### 测试不同位置的路由
+
+```bash
+# 测试从圣塔莫尼卡的路由
+kubectl exec -it test-client -n uav-demo -- \
+  curl -H "x-source-location: santa-monica" \
+  http://uav-smart-service.uav-demo.svc.cluster.local
+
+# 测试从帕萨迪纳的路由
+kubectl exec -it test-client -n uav-demo -- \
+  curl -H "x-source-location: pasadena" \
+  http://uav-smart-service.uav-demo.svc.cluster.local
+```
+
+## 🎮 实际使用场景
+
+### 场景1: 添加新UAV节点
+
+```bash
+# 扩展UAV节点到5个
+kubectl scale deployment uav-node-1 --replicas=2 -n uav-demo
+kubectl scale deployment uav-node-2 --replicas=2 -n uav-demo
+kubectl scale deployment uav-node-3 --replicas=1 -n uav-demo
+
+# 验证新节点
+kubectl get pods -l app=uav-node -n uav-demo -o wide
+```
+
+### 场景2: 自定义GPS位置
+
+```yaml
+# 编辑 uav-nodes.yaml 中的GPS坐标
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: uav-gps-config
+data:
+  locations: |
+    - name: "new-york"
+      lat: 40.7128
+      lon: -74.0060
+    - name: "chicago"
+      lat: 41.8781
+      lon: -87.6298
+```
+
+### 场景3: 修改路由策略
+
+```yaml
+# 修改 routing-rules.yaml 中的权重分配
+spec:
+  http:
+  - match:
+    - headers:
+        x-source-location:
+          exact: "downtown-la"
+    route:
+    - destination:
+        host: uav-node-1
+      weight: 70        # 增加到70%
+    - destination:
+        host: uav-node-2
+      weight: 20        # 减少到20%
+    - destination:
+        host: uav-node-3
+      weight: 10        # 减少到10%
+```
+
+## 🔧 故障排除
+
+### 常见问题
+
+#### 1. Pod卡在Init状态
+```bash
+# 检查Istio CNI
+kubectl get pods -n istio-system | grep cni
+
+# 重启ztunnel
+kubectl delete pods -n istio-system -l app=ztunnel
+```
+
+#### 2. 路由不工作
+```bash
+# 检查VirtualService
+kubectl describe virtualservice uav-smart-service -n uav-demo
+
+# 检查路由配置
+istioctl proxy-config routes -n uav-demo $(kubectl get pods -n uav-demo -l app=uav-node-1 -o jsonpath='{.items[0].metadata.name}')
+```
+
+#### 3. CRD无法创建资源
 ```bash
 # 检查CRD状态
-kubectl get crd uavmetrics.monitor.k8s-llm-monitor.com
+kubectl get crd uavmetrics.monitoring.io -o yaml
 
-# 重新创建CRD
-kubectl apply -f docs/UAV_SCHEDULER_README.md
+# 重新部署CRD
+kubectl delete crd uavmetrics.monitoring.io
+kubectl apply -f api/crd/uav-metrics.yaml
 ```
 
-## 📚 更多信息
+## 🚀 下一步
 
-- 📖 **完整文档**: [docs/UAV_SCHEDULER_README.md](docs/UAV_SCHEDULER_README.md)
-- 🔧 **配置详解**: [docs/UAV_SCHEDULER_README.md#配置详解](docs/UAV_SCHEDULER_README.md#配置详解)
-- 🐛 **故障排除**: [docs/UAV_SCHEDULER_README.md#故障排除](docs/UAV_SCHEDULER_README.md#故障排除)
+现在您已经成功部署了UAV Monitor系统！接下来可以：
 
-## 🎉 成功标志
+1. 📊 **部署监控系统**: 部署Prometheus和Grafana进行监控
+2. 🌐 **部署Web界面**: 部署前端管理界面
+3. 🔧 **自定义算法**: 实现自己的调度算法
+4. 📱 **移动端集成**: 开发移动端应用
 
-当你看到以下情况时，说明部署成功：
+详细的配置和扩展选项请参考：
+- 📖 [完整文档](docs/)
+- 🏗️ [项目结构](PROJECT_STRUCTURE.md)
+- 🔄 [集群迁移](MIGRATION_GUIDE.md)
 
-1. ✅ 调度器Pod运行正常
-2. ✅ 5个UAV节点数据创建成功
-3. ✅ Demo模式自动执行
-4. ✅ 日志显示"NSGA-II optimization completed"
-5. ✅ 节点集合绑定成功
+## 🎯 成功验证标准
 
-恭喜！你的UAV智能调度系统已经运行起来了！🚁✨
+✅ **部署成功**:
+- [ ] 所有Pod处于Running状态
+- [ ] CRD资源可以正常创建
+- [ ] Istio Ambient模式正常运行
+
+✅ **功能验证**:
+- [ ] 路由测试返回不同响应
+- [ ] GPS位置影响路由决策
+- [ ] 可以查看UAV监控数据
+
+🚁 **恭喜！您的智能UAV集群已经准备就绪！**
